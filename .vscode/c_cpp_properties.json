@@ -1,0 +1,17 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/usr/include/SDL2",
+                "${workspaceFolder}/libs/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/clang",
+            "intelliSenseMode": "linux-clang-x64",
+            "configurationProvider": "ms-vscode.makefile-tools"
+        }
+    ],
+    "version": 4
+}

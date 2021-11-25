@@ -1,0 +1,17 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "../libs/sdw",
+                "../libs/glm-0.9.7.2",
+                "/usr/include/SDL2"
+            ],
+            "compilerPath": "/usr/bin/clang",
+            "cStandard": "c99",
+            "intelliSenseMode": "linux-clang-x64",
+            "configurationProvider": "ms-vscode.makefile-tools"
+        }
+    ],
+    "version": 4
+}
