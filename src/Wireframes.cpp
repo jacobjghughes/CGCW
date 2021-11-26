@@ -19,10 +19,11 @@
 
 #define WIDTH 300
 #define HEIGHT 300
-#define BRICK "../textures/texture.ppm"
-#define BOX "/home/jakehughes/Desktop/CGCW/models/cornell-box.obj"
+// #define BRICK "../textures/texture.ppm"
+#define MODELS "/home/jakehughes/Desktop/CGCW/models"
+#define BOX "/home/jakehughes/Desktop/CGCW/models/textured-cornell-box.obj"
 // #define BOX "/home/jakehughes/Desktop/CG2021/Weekly Workbooks/04 Wireframes and Rasterising/Wireframes/models/boxes.obj"
-#define MATS "/home/jakehughes/Desktop/CGCW/models/cornell-box.mtl"
+#define MATS "/home/jakehughes/Desktop/CGCW/models/textured-cornell-box.mtl"
 #define FOCLEN 6 // default focal length
 #define SCALE 50
 #define DEFPOS glm::vec3(0.0, 0.0, 10.0)
@@ -35,10 +36,9 @@ bool OrbiterToggle;
 glm::vec3 campos(0.0, 0.0, 10.0); 
 float depthBuffer[WIDTH * HEIGHT];
 std::vector<ModelTriangle> triangleList;
-glm::mat3 camrot(1,0,0,
-				 0,1,0,
-				 0,0,1);
-
+std::vector<std::string> textureList;
+glm::mat3 camrot(DEFROT);
+int renderStyle = 0;
 
 CanvasPoint vecToCP(glm::vec3 vec) {
 	CanvasPoint p(vec.x, vec.y, vec.z);
@@ -95,12 +95,31 @@ std::vector<glm::vec3> interpolateThreeElementValues(glm::vec3 from, glm::vec3 t
 
 	interpolatedList.push_back(from);
 	for (int i = 1; i < numberOfValues; i++) {
-		// if (interpolatedList.back().x > WIDTH || interpolatedList.back().x < 0 || interpolatedList.back().y < 0 || interpolatedList.back().y > HEIGHT) {
-			// std::cout << "x: " << interpolatedList.back().x << " y: " << interpolatedList.back().y << " z: " << interpolatedList.back().z << std::endl;
-			// i = numberOfValues;
-			// break;
-		// }
 		interpolatedList.push_back(interpolatedList.back() + step);
+	}
+	return interpolatedList;
+}
+
+std::vector<CanvasPoint> interpolateTexturePoints(CanvasPoint from, CanvasPoint to, int numberOfValues) {
+	std::vector<CanvasPoint> interpolatedList;
+	float xstep, ystep, zstep, txstep, tystep;
+
+	if (numberOfValues < 2) numberOfValues = 2;
+	xstep = (to.x - from.x) / (numberOfValues - 1);
+	ystep = (to.y - from.y) / (numberOfValues - 1);
+	zstep = (to.depth - from.depth) / (numberOfValues - 1);
+	txstep = (to.texturePoint.x - from.texturePoint.x) / (numberOfValues - 1);
+	tystep = (to.texturePoint.y - from.texturePoint.y) / (numberOfValues - 1);
+
+	interpolatedList.push_back(from);
+	for (int i = 1; i < numberOfValues; i++) {
+		CanvasPoint p(interpolatedList.back());
+		p.x += xstep;
+		p.y += ystep;
+		p.depth += zstep;
+		p.texturePoint.x += txstep;
+		p.texturePoint.y += tystep;
+		interpolatedList.push_back(p);
 	}
 	return interpolatedList;
 }
@@ -108,35 +127,28 @@ std::vector<glm::vec3> interpolateThreeElementValues(glm::vec3 from, glm::vec3 t
 void drawLine(CanvasPoint from, CanvasPoint to, DrawingWindow &window, Colour c = Colour(230,10,230)) {
 	int xDiff = round(abs(to.x - from.x)); 
 	int yDiff = round(abs(to.y - from.y));
-	// int zDiff = round(abs(to.depth - from.depth));
 	int numberOfValues = std::max(xDiff, yDiff);
-	// numberOfValues = std::max(numberOfValues, zDiff);
 	numberOfValues *= 2;
 	uint32_t colour = ColourToInt(c);
 
 	glm::vec3 vecfrom = cpToVec(from);
 	glm::vec3 vecto = cpToVec(to);
 
-	// if both points are on canvas then draw normally
-	// if (inbounds(from) && inbounds(to)) {
-		std::vector<glm::vec3> Points = interpolateThreeElementValues(vecfrom, vecto, numberOfValues);
+	std::vector<glm::vec3> Points = interpolateThreeElementValues(vecfrom, vecto, numberOfValues);
+	for (int i = 0; i < Points.size(); i++) {
+		int x = round(Points[i].x);
+		int y = round(Points[i].y);
+		float z = Points[i].z;
+		int index = y * WIDTH + x;
 
-		// for (int i = 0; i < numberOfValues - 1; i++) {
-		for (int i = 0; i < Points.size(); i++) {
-			int x = round(Points[i].x);
-			int y = round(Points[i].y);
-			float z = Points[i].z;
-			int index = y * WIDTH + x;
-
-			// only draw pixel if its on canvas, and checks index is within range
-			if (inbounds(CanvasPoint(x,y)) && index < WIDTH*HEIGHT && index >= 0) {
-				if (z > 0 && (depthBuffer[index] < 100/z || depthBuffer[index] == 0)) {
-					depthBuffer[index] = 100/z;
-					window.setPixelColour(x, y, colour);
-				}	
-			}
+		// only draw pixel if its on canvas, and checks index is within range
+		if (inbounds(CanvasPoint(x,y)) && index < WIDTH*HEIGHT && index >= 0) {
+			if (z > 0 && (depthBuffer[index] < 100/z || depthBuffer[index] == 0)) {
+				depthBuffer[index] = 100/z;
+				window.setPixelColour(x, y, colour);
+			}	
 		}
-	// }
+	}
 }
 
 void drawStrokedTriangle(CanvasTriangle t, DrawingWindow &window, Colour c = Colour(230,10,230)) {
@@ -177,13 +189,6 @@ CanvasTriangle sortVerticesVertically(CanvasTriangle t) {
 	}
 
 	t = CanvasTriangle(vertices[0],vertices[1],vertices[2]);
-
-	// //test vertex sort function
-	// std::cout << t << std::endl;
-	// assert(t.v0().y<=t.v1().y);
-	// assert(t.v0().y<=t.v2().y);
-	// assert(t.v1().y<=t.v2().y);
-
 	return t;
 }
 
@@ -212,17 +217,17 @@ CanvasPoint lineRatio(CanvasPoint from, CanvasPoint to, float ratio) {
 	return newp;
 }
 
-CanvasPoint findIntercept(CanvasTriangle t) {
-	// float dx, dy, dix, diy;
-	// dx = end.x - start.x;
-	// dy = end.y - start.y;
-	// diy = start.y - yValue;
-	// dix = diy ;
+TexturePoint lineRatio(TexturePoint from, TexturePoint to, float ratio) {
+	float xlen = (to.x - from.x) * ratio;
+	float ylen = (to.y - from.y) * ratio;
 
-	// if (abs(dy) <= 1) return start.x;
-	// else if (abs(dx) <= 1) return start.x + (dx/2);
-	// else return start.x + dix;
-	
+	TexturePoint newp(from);
+	newp.x += xlen;
+	newp.y += ylen;
+	return newp;
+}
+
+CanvasPoint findIntercept(CanvasTriangle t) {
 	float verticalHeight = (abs(t.v2().y - t.v0().y));
 	float interceptHeight = (abs(t.v1().y - t.v0().y));
 	float ratio = interceptHeight / verticalHeight;
@@ -231,38 +236,14 @@ CanvasPoint findIntercept(CanvasTriangle t) {
 	return intercept;
 }
 
-/* float findXIntercept(float yValue, TexturePoint start, TexturePoint end) {
-	float intercept = (yValue * (start.x - end.x) +  ((end.x * start.y) - (start.x * end.y))) / (start.y - end.y);
-	return intercept;
-} */
+TexturePoint findTexturePointIntercept(CanvasTriangle t) {
+	float verticalHeight = (abs(t.v2().y - t.v0().y));
+	float interceptHeight = (abs(t.v1().y - t.v0().y));
+	float ratio = interceptHeight / verticalHeight;
 
-/* float findYIntercept(float xValue, CanvasPoint start, CanvasPoint end) {
-	// float dx, dy, dix, diy;
-	// dx = end.x - start.x;
-	// dy = end.y - start.y;
-	// dix = start.x - xValue;
-	// diy = dix * dy / dx;
-	
-	// if (abs(dy) <= 1) return start.y;
-	// else if (abs(dx) <= 1) return start.y + (dy / 2);
-	// else return start.y + diy;
-	
-	
-
-	float intercept;
-	if (abs(start.x - end.x) < 1) {
-		intercept = start.y;
-	}
-	else {
-		intercept = (xValue * (start.y - end.y) +  ((start.x * end.y) - (end.x * start.y))) / (start.x - end.x);
-	}
+	TexturePoint intercept(lineRatio(t.v0().texturePoint, t.v2().texturePoint, ratio));
 	return intercept;
-} */
-
-/* float findYIntercept(float xValue, TexturePoint start, TexturePoint end) {
-	float intercept = (xValue * (start.y - end.y) +  ((start.x * end.y) - (end.x * start.y))) / (start.x - end.x);
-	return intercept;
-} */
+}
 
 void rasterizeTriangle(CanvasTriangle t, DrawingWindow &window, Colour c) {
 
@@ -300,12 +281,6 @@ void rasterizeTriangle(CanvasTriangle t, DrawingWindow &window, Colour c) {
 		topT = sortTopTriangle(CanvasTriangle(intercept, vertices[0], vertices[1]));
 	}
 
-
-	// float minX = std::min(topT.v1().x, topT.v2().x);
-	// minX = floor(round(std::min(topT.v0().x, minX)));
-	// float maxX = std::max(topT.v1().x, topT.v2().x);
-	// maxX = ceil(round(std::max(topT.v0().x, maxX)));
-		
 	//rasterise top triangle, if there is one
 	if (!flatTop) {
 
@@ -317,14 +292,6 @@ void rasterizeTriangle(CanvasTriangle t, DrawingWindow &window, Colour c) {
 		int width = std::max(left, right);
 		width = std::max(width, base);
 	
-
-		// std::vector<glm::lowp_vec3>  ApexLeftY = interpolateLowPVec(cpToVec(topT.v0()), cpToVec(topT.v1()), height);
-		// std::vector<glm::lowp_vec3> ApexRightY = interpolateLowPVec(cpToVec(topT.v0()), cpToVec(topT.v2()), height);
-
-		// std::vector<glm::lowp_vec3>  LeftApexX = interpolateLowPVec(cpToVec(topT.v1()), cpToVec(topT.v0()), left);
-		// std::vector<glm::lowp_vec3> ApexRightX = interpolateLowPVec(cpToVec(topT.v0()), cpToVec(topT.v2()), right);
-		// std::vector<glm::lowp_vec3> LeftRight = interpolateLowPVec(cpToVec(topT.v1()), cpToVec(topT.v2()), base);
-
 		std::vector<glm::vec3>  ApexLeftY = interpolateThreeElementValues(cpToVec(topT.v0()), cpToVec(topT.v1()), height);
 		std::vector<glm::vec3> ApexRightY = interpolateThreeElementValues(cpToVec(topT.v0()), cpToVec(topT.v2()), height);
 
@@ -473,6 +440,102 @@ void rasterizeTriangle(CanvasTriangle t, DrawingWindow &window, Colour c) {
 	}
 }
 
+uint32_t getTexturePixel(TexturePoint p, TextureMap &map) {
+	return map.pixels[(round(p.y) * map.width) + round(p.x)];
+}
+
+void textureTriangle(CanvasTriangle t, DrawingWindow &window, int textureIndex) {
+	std::cout << textureList.at(textureIndex) << std::endl;
+	TextureMap texture(textureList.at(textureIndex));
+	// MAKE A TEXTUREMAP DICTIONARY
+
+	t = sortVerticesVertically(t); 
+
+	std::vector<CanvasPoint> vertices;
+	vertices.push_back(t.v0());
+	vertices.push_back(t.v1());
+	vertices.push_back(t.v2());
+
+	CanvasTriangle topT; 
+	CanvasTriangle botT;
+
+	bool flatTop = false;
+	bool flatBot = false;
+
+	// checks the triangle to see if it already has a flat top or bottom
+	// bottom triangle (flat top)
+	if (floor(vertices[0].y) == floor(vertices[1].y)) {
+		flatTop = true;
+		botT = sortBottomTriangle(t);
+	}
+
+	// top triangle (flat bottom)
+	if (floor(vertices[1].y) == floor(vertices[2].y)) {
+		flatBot = true;
+		topT = sortTopTriangle(t);
+	}
+
+	if (!flatTop && !flatBot) {
+		// creates new point intercept which is the horizontal intercept at the y value of the middle vertex
+		CanvasPoint intercept(findIntercept(t));
+		intercept.texturePoint = findTexturePointIntercept(t);
+		botT = sortBottomTriangle(CanvasTriangle(intercept, vertices[1], vertices[2]));
+		topT = sortTopTriangle(CanvasTriangle(intercept, vertices[0], vertices[1]));
+	}
+
+	if (!flatTop) {	
+		// Interpolate left and right points on top triangle and corresponding texturepoints
+		int height = abs(round(topT.v1().y - topT.v0().y));// * 2;
+		std::vector<CanvasPoint> ApexLeftY  = interpolateTexturePoints(topT.v0(), topT.v1(), height);
+		std::vector<CanvasPoint> ApexRightY = interpolateTexturePoints(topT.v0(), topT.v2(), height);
+
+		// draw horizontal lines between [apex,left]@ys and [apex,right]@ys
+		for (int ys = 0; ys < height; ys++) {
+			CanvasPoint from, to; 
+			int width = abs(round(ApexLeftY[ys].x - ApexRightY[ys].x));
+			// interpolate rake row on texture points
+			std::vector<CanvasPoint> rakeRow = interpolateTexturePoints(ApexLeftY[ys],ApexRightY[ys], width);
+			for (int xs = 0; xs < width; xs++) {
+				CanvasPoint p(rakeRow[xs]);
+				int index = p.y * WIDTH + p.x;
+
+				if (inbounds(p) && index < WIDTH*HEIGHT && index >= 0) {
+					if (p.depth > 0 && (depthBuffer[index] < 100 / p.depth || depthBuffer[index] == 0)) {
+						depthBuffer[index] = 100/p.depth;
+						window.setPixelColour(round(p.x), round(p.y), getTexturePixel(p.texturePoint, texture));
+					}	
+				}
+			}
+		}
+	}
+
+	if (!flatBot) {
+		// Interpolate left and right points on bot triangle and corresponding texturepoints
+		int height = abs(round(botT.v1().y - botT.v0().y));// * 2;
+		std::vector<CanvasPoint> ApexLeftY  = interpolateTexturePoints(botT.v0(), botT.v1(), height);
+		std::vector<CanvasPoint> ApexRightY = interpolateTexturePoints(botT.v0(), botT.v2(), height);
+
+		// draw horizontal lines between [apex,left]@ys and [apex,right]@ys
+		for (int ys = 0; ys < height; ys++) {
+			CanvasPoint from, to; 
+			int width = abs(round(ApexLeftY[ys].x - ApexRightY[ys].x));
+			// interpolate rake row on texture points
+			std::vector<CanvasPoint> rakeRow = interpolateTexturePoints(ApexLeftY[ys],ApexRightY[ys], width);
+			for (int xs = 0; xs < width; xs ++) {
+				CanvasPoint p(rakeRow[xs]);
+				int index = p.y * WIDTH + p.x;
+
+				if (inbounds(p) && index < WIDTH*HEIGHT && index >= 0) {
+					if (p.depth > 0 && (depthBuffer[index] < 100 / p.depth || depthBuffer[index] == 0)) {
+						depthBuffer[index] = 100/p.depth;
+						window.setPixelColour(round(p.x), round(p.y), getTexturePixel(p.texturePoint, texture));
+					}	
+				}
+			}
+		}
+	}
+	drawStrokedTriangle(t,window,Colour(255,255,255));
+}
 
 CanvasPoint scalePoint(CanvasPoint p, float scaleFactor) {
 	p.x *= scaleFactor;
@@ -502,19 +565,77 @@ std::vector<ModelTriangle> scaleModelTriangles(std::vector<ModelTriangle> triang
 		triangleList[i].vertices[0] *= scaleFactor;
 		triangleList[i].vertices[1] *= scaleFactor;
 		triangleList[i].vertices[2] *= scaleFactor;
-
-		// std::cout << triangleList[i] << std::endl;
 	}
 	return triangleList;
 }
 
-// std::unordered_map<std::string, Colour> 
+void clearScene(DrawingWindow &window) {
+	window.clearPixels();
+	for (int i = 0; i < WIDTH * HEIGHT; i++) {
+		depthBuffer[i] = 0;
+	}
+}
+
+void draw(DrawingWindow &window) {
+	// for (int i = 0; i < 12; i++) { // no boxes
+	// for (int i = 12; i < 22; i++) { // red box
+	// for (int i = 22; i < 32; i++) { // blue box
+	// for (int i = 12; i < triangleList.size(); i++) { // both boxes
+	for (int i = 0; i < triangleList.size(); i++) { //whole scene
+		CanvasTriangle t;
+		Colour colour(triangleList[i].colour);
+
+		for (int j = 0; j < 3; j++) {
+			CanvasPoint p = getCanvasIntersectionPoint(triangleList[i].vertices[j]);
+			t.vertices[j].x = p.x;
+			t.vertices[j].y = p.y;
+			t.vertices[j].depth = p.depth;
+		}
+
+		// switch case for changing render style 
+		// 1 - wireframes
+		// 2 - rasterising 
+		// std::string colourname = colour.name;
+		switch (renderStyle) {
+			case 1:
+				drawStrokedTriangle(t, window, colour);
+				break;
+			
+			case 2: 
+				// get the name of the colour, if it starts with texture then texturise it
+				// otherwise rasterise
+				// std::cout << colour.name.substr(0,7) << std::endl;
+				// if (colour.name.substr(0,7).compare("texture") == 0) {
+				// 	textureTriangle(t, window, colour.red);
+				// }
+
+				/// NEED TO IMPLEMENT TEXTURE DETECTION + GET TEXTURES DRAWING PROPERLY
+				if (colour.name.compare("Cobbles") == 0) {
+					std::cout << colour.red << std::endl;
+					textureTriangle(t, window, -colour.red);
+				}
+				else {
+					rasterizeTriangle(t, window, colour);
+				}
+				break;
+
+			default:
+				break;
+		}
+
+		// IF WIREFRAME :
+		// IF RASTERISING :
+		// IF TEXTURED : 
+	}
+}
+
 void readMaterialFile(std::unordered_map<std::string, Colour> &materials, std::string filename) {
-	// std::unordered_map<std::string, Colour> materials;
 	std::ifstream file(filename, std::ifstream::in);	
 	std::string readLine;
 	std::string name;
 	Colour colour;
+	int textureCount = 0;
+	textureList.clear();
 
 	if (file.is_open()) {
 		while(std::getline(file, readLine)) {
@@ -531,39 +652,24 @@ void readMaterialFile(std::unordered_map<std::string, Colour> &materials, std::s
 				materials.emplace(name,colour);
 			}
 			else if (lineSegments[0] == "map_Kd") {
-				// LOAD TEXTURE
+				// if mtl is a texturemap, set the colour name to "texture_[name]"
+				// and set the r value to the texture index
+				// emplace the ppm path into texturelist (with index = colour.r)
+				
+				
+				std::string texturePath = MODELS;
+				texturePath.append("/" + lineSegments[1]);
+				textureList.emplace_back(texturePath);
+				// colour.name = "texture" + name;
+				// colour.red  = textureCount;
+				// std::cout << texturePath << std::endl;
+				
+				materials.at(name).red = -textureCount;
+				textureCount++;
 			}
 		}
 	}
 } 
-
-void clearScene(DrawingWindow &window) {
-	window.clearPixels();
-	for (int i = 0; i < WIDTH * HEIGHT; i++) {
-		depthBuffer[i] = 0;
-	}
-
-}
-
-void draw(DrawingWindow &window) {
-	// for (int i = 0; i < 12; i++) { // no boxes
-	// for (int i = 12; i < 22; i++) { // red box
-	// for (int i = 22; i < 32; i++) { // blue box
-	// for (int i = 12; i < triangleList.size(); i++) { // both boxes
-	for (int i = 0; i < triangleList.size(); i++) { //whole scene
-		CanvasTriangle t;
-		for (int j = 0; j < 3; j++) {
-			CanvasPoint p = getCanvasIntersectionPoint(triangleList[i].vertices[j]);
-			t.vertices[j].x = p.x;
-			t.vertices[j].y = p.y;
-			t.vertices[j].depth = p.depth;
-		}
-		// drawStrokedTriangle(t, window, triangleList[i].colour);
-		rasterizeTriangle(t, window, triangleList[i].colour);
-		// std::cout <<"Done " << i + 1<< " out of " << triangleList.size() << std::endl;
-	}
-		// std::cout <<"Done All" << std::endl;
-}
 
 void readOBJFile(std::string filename, DrawingWindow &window) {
 	std::ifstream file(filename, std::ifstream::in);	
@@ -602,7 +708,6 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 				triangleList.push_back(ModelTriangle(vertexList[a], vertexList[b], vertexList[c], currentMaterial));
 			}
 			else if (lineSegments[0] == "usemtl") {
-				// std::cout << '.' << lineSegments[1] << '.' << std::endl;
 				currentMaterial = materials.at(lineSegments[1]);
 			}
 		}
@@ -816,8 +921,27 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 			lookAt(CanvasPoint(0,0,0));
 		}
 
+		// change render style with numbers
+		// 1 = wireframes
+		else if (event.key.keysym.sym == SDLK_1) {
+			renderStyle = 1;
+		}
+		// 2 = rasterise
+		else if (event.key.keysym.sym == SDLK_2) {
+			renderStyle = 2;
+		}
+		else if (event.key.keysym.sym == SDLK_3) {
+			renderStyle = 3;
+		}
+		else if (event.key.keysym.sym == SDLK_0) {
+			renderStyle = 0;
+		}
+
 		// else if (event.key.keysym.sym == SDLK_m) readMaterialFile(std::unordered_map<std::string, Colour> materials, MATS);
-		else if (event.key.keysym.sym == SDLK_o) readOBJFile(BOX, window);
+		else if (event.key.keysym.sym == SDLK_o) {
+			readOBJFile(BOX, window);
+			draw(window);
+		} 
 		// else if (event.key.keysym.sym == SDLK_c) clearScene(window);
 		else if (event.key.keysym.sym == SDLK_r) {
 			clearScene(window);
@@ -836,7 +960,7 @@ int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
 
-	std::cout << BRICK << BOX << MATS << std::endl;
+	// std::cout << BRICK << BOX << MATS << std::endl;
 	readOBJFile(BOX, window);
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !

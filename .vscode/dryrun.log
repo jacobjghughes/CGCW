@@ -1,8 +1,8 @@
-/usr/bin/make diagnostic --dry-run --keep-going --print-directory
+/usr/bin/make debug --dry-run --keep-going --print-directory
 make: Entering directory '/home/jakehughes/Desktop/CGCW'
  
-clang++ -c -pipe -Wall -std=c++11  -Werror -pedantic -O1 -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer -o build/Wireframes.o src/Wireframes.cpp -I/usr/include/SDL2 -D_REENTRANT -I./libs/sdw/ -I./libs/glm-0.9.7.2/
-clang++  -Werror -pedantic -O1 -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer -o build/Wireframes build/Wireframes.o  build/CanvasTriangle.o  build/Colour.o  build/Utils.o  build/RayTriangleIntersection.o  build/TextureMap.o  build/TexturePoint.o  build/DrawingWindow.o  build/ModelTriangle.o  build/CanvasPoint.o -lSDL2
+clang++ -c -pipe -Wall -std=c++11  -ggdb -g3 -o build/Wireframes.o src/Wireframes.cpp -I/usr/include/SDL2 -D_REENTRANT -I./libs/sdw/ -I./libs/glm-0.9.7.2/
+clang++  -ggdb -g3 -o build/Wireframes build/Wireframes.o  build/CanvasTriangle.o  build/Colour.o  build/Utils.o  build/RayTriangleIntersection.o  build/TextureMap.o  build/TexturePoint.o  build/DrawingWindow.o  build/ModelTriangle.o  build/CanvasPoint.o -lSDL2
 ./build/Wireframes
 make: Leaving directory '/home/jakehughes/Desktop/CGCW'
  
