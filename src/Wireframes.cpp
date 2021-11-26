@@ -30,6 +30,7 @@
 
 // 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
 
+bool OrbiterToggle;
 glm::vec3 campos(0.0, 0.0, 10.0); 
 float depthBuffer[WIDTH * HEIGHT];
 std::vector<ModelTriangle> triangleList;
@@ -493,7 +494,6 @@ CanvasPoint getCanvasIntersectionPoint(glm::vec3 vertexPosition, float focalLeng
 	projectedPoint.depth = -1 * focalLength * vertexPosition.z;
 	// std::cout << "depth: " << projectedPoint.depth << std::endl;
 	return projectedPoint;
-
 }
 
 std::vector<ModelTriangle> scaleModelTriangles(std::vector<ModelTriangle> triangleList, float scaleFactor) {
@@ -514,7 +514,6 @@ void readMaterialFile(std::unordered_map<std::string, Colour> &materials, std::s
 	std::string readLine;
 	std::string name;
 	Colour colour;
-
 
 	if (file.is_open()) {
 		while(std::getline(file, readLine)) {
@@ -610,6 +609,59 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 	triangleList = scaleModelTriangles(triangleList, 0.17);
 }
 
+void rotateScene(int dir = 0, float angle = M_PI/16) {
+	glm::mat3 matrix;
+	switch (dir) {
+	case 1:
+		// rotate left (about y) key: J
+		matrix = glm::mat3(
+			cos(angle), 0, -sin(angle),
+			         0, 1, 0,
+			sin(angle), 0, cos(angle)
+		);
+		campos = matrix * campos;
+		// camrot = matrix * camrot;
+		break;
+		
+	
+	case 2:
+		// rotate right (about y) key: L
+		matrix = glm::mat3(
+			cos(-angle), 0, -sin(-angle),
+			          0, 1, 0,
+			sin(-angle), 0, cos(-angle)
+		);
+		campos = matrix * campos;
+		// camrot = matrix * camrot;
+		break;
+	
+	case 3:
+		// rotate up (about x) key I
+		matrix = glm::mat3(
+			1,           0, 0,
+			0,  cos(angle), sin(angle),
+			0, -sin(angle), cos(angle)
+		);
+		campos = matrix * campos;
+		// camrot = matrix * camrot;
+		break;
+	
+	case 4:
+		// rotate down (about x) key K
+		matrix = glm::mat3(
+			1,            0, 0,
+			0,  cos(-angle), sin(-angle),
+			0, -sin(-angle), cos(-angle)
+		);		
+		campos = matrix * campos;
+		// camrot = matrix * camrot;
+		break;
+	
+	default:
+		break;
+	}
+}
+
 void rotateCamera(int dir = 0, float angle = M_PI/16) {
 	glm::mat3 matrix;
 	switch (dir) {
@@ -661,6 +713,12 @@ void rotateCamera(int dir = 0, float angle = M_PI/16) {
 	default:
 		break;
 	}
+}
+
+void orbitCamera() {
+	rotateScene(1, 0.05);
+	rotateCamera(2, 0.05);
+	
 }
 
 void nudgeCamera(int dir = 0, float mag = 0.1) {
@@ -736,6 +794,10 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_k) {
 			rotateCamera(4);
 		}
+		// Camera orbiter toggle Key = P
+		else if (event.key.keysym.sym == SDLK_p) {
+			OrbiterToggle = !OrbiterToggle;
+		}
 
 		// else if (event.key.keysym.sym == SDLK_m) readMaterialFile(std::unordered_map<std::string, Colour> materials, MATS);
 		else if (event.key.keysym.sym == SDLK_o) readOBJFile(BOX, window);
@@ -746,6 +808,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 			campos = DEFPOS;
 			camrot = DEFROT;
 		}
+
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) {
 		window.savePPM("output.ppm");
 		window.saveBMP("output.bmp");
@@ -761,9 +824,12 @@ int main(int argc, char *argv[]) {
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
-		// Need to render the frame at the end, or nothing actually gets shown on the screen !
+		if (OrbiterToggle) {
+			orbitCamera();
+		}	
 		clearScene(window);
 		draw(window);
+		// Need to render the frame at the end, or nothing actually gets shown on the screen !
 		window.renderFrame();
 	}
 }

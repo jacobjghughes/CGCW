@@ -8,7 +8,7 @@ make: *** No rule to make target 'all'.  Stop.
 # This is free software: you are free to change and redistribute it.
 # There is NO WARRANTY, to the extent permitted by law.
 
-# Make data base, printed on Thu Nov 25 13:54:42 2021
+# Make data base, printed on Fri Nov 26 13:53:48 2021
 
 # Variables
 
@@ -43,7 +43,7 @@ GDMSESSION = pantheon
 # environment
 XMODIFIERS = @im=ibus
 # makefile
-CURDIR := /home/jakehughes/Desktop/CG2021/Weekly Workbooks/04 Wireframes and Rasterising/Wireframes
+CURDIR := /home/jakehughes/Desktop/CGCW
 # makefile
 SHELL = /bin/sh
 # environment
@@ -71,7 +71,7 @@ MAKELEVEL := 0
 # environment
 MANDATORY_PATH = /usr/share/gconf/pantheon.mandatory.path
 # environment
-XDG_DATA_DIRS = /usr/share/gnome:/usr/share/pantheon:/home/jakehughes/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
+XDG_DATA_DIRS = /usr/share/gnome:/usr/share/pantheon:/home/jakehughes/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share:/var/lib/snapd/desktop
 # environment
 DBUS_SESSION_BUS_ADDRESS = unix:path=/run/user/1000/bus
 # environment
@@ -101,7 +101,7 @@ SDL_COMPILER_FLAGS := -I/usr/include/SDL2 -D_REENTRANT
 # environment
 GPG_AGENT_INFO = /run/user/1000/gnupg/S.gpg-agent:0:1
 # environment
-SESSION_MANAGER = local/JHInspiron:@/tmp/.ICE-unix/1063,unix/JHInspiron:/tmp/.ICE-unix/1063
+SESSION_MANAGER = local/JHInspiron:@/tmp/.ICE-unix/1324,unix/JHInspiron:/tmp/.ICE-unix/1324
 # environment
 XDG_RUNTIME_DIR = /run/user/1000
 # makefile (from 'Makefile', line 25)
@@ -123,7 +123,7 @@ XDG_SESSION_DESKTOP = pantheon
 # environment
 SSH_AUTH_SOCK = /run/user/1000/keyring/ssh
 # environment
-GIO_LAUNCHED_DESKTOP_FILE_PID = 1534
+GIO_LAUNCHED_DESKTOP_FILE_PID = 26953
 # automatic
 %F = $(notdir $%)
 # environment
@@ -133,13 +133,13 @@ SANITIZER_OPTIONS := -O1 -fsanitize=undefined -fsanitize=address -fno-omit-frame
 # environment
 VSCODE_PIPE_LOGGING = true
 # environment
-PWD = /home/jakehughes/Desktop/CG2021/Weekly Workbooks/04 Wireframes and Rasterising/Wireframes
+PWD = /home/jakehughes/Desktop/CGCW
 # environment
 QT_QPA_PLATFORMTHEME = gtk3
 # default
 .LOADED := 
 # environment
-SSH_AGENT_PID = 1173
+SSH_AGENT_PID = 1430
 # environment
 ORIGINAL_XDG_CURRENT_DESKTOP = Pantheon
 # environment
@@ -151,7 +151,7 @@ HOME = /home/jakehughes
 # environment
 LESSCLOSE = /usr/bin/lesspipe %s %s
 # environment
-VSCODE_CODE_CACHE_PATH = /home/jakehughes/.config/Code/CachedData/3a6960b964327f0e3882ce18fcebd07ed191b316
+VSCODE_CODE_CACHE_PATH = /home/jakehughes/.config/Code/CachedData/ccbaa2d27e38e5afa3e5c21c1c7bef4657064247
 # environment
 LOGNAME = jakehughes
 # environment
@@ -179,7 +179,7 @@ OBJECT_FILE := build/Wireframes.o
 # makefile (from 'Makefile', line 3)
 BUILD_DIR := build
 # environment
-VSCODE_IPC_HOOK_EXTHOST = /run/user/1000/vscode-ipc-2048bb70-2646-4e8f-a4b4-8ffdf7f30db3.sock
+VSCODE_IPC_HOOK_EXTHOST = /run/user/1000/vscode-ipc-c1eba755-7708-46c9-a3a5-c9fd84ab0a00.sock
 # default
 MAKE_VERSION := 4.2.1
 # environment
@@ -209,7 +209,7 @@ LANGUAGE = en_GB
 # environment
 XDG_SEAT_PATH = /org/freedesktop/DisplayManager/Seat0
 # environment
-VSCODE_IPC_HOOK = /run/user/1000/vscode-f4e6f3d3-1.62.2-main.sock
+VSCODE_IPC_HOOK = /run/user/1000/vscode-f4e6f3d3-1.62.3-main.sock
 # makefile
 MAKEFLAGS = pqrR
 # environment
@@ -275,9 +275,8 @@ LC_ADDRESS = en_GB.UTF-8
 # environment
 LANG = C
 # environment
-VSCODE_PID = 1534
+VSCODE_PID = 26953
 # variable set hash-table stats:
- 
 # Load=132/1024=13%, Rehash=0, Collisions=14/182=8%
 
 # Pattern-specific Variable Values
@@ -286,11 +285,11 @@ VSCODE_PID = 1534
 
 # Directories
 
-# . (device 66313, inode 2237240): 13 files, no impossibilities.
-# ./libs/sdw (device 66313, inode 2365934): 20 files, no impossibilities.
-# libs/sdw (device 66313, inode 2365934): 20 files, no impossibilities.
+# . (device 66313, inode 2756236): 14 files, no impossibilities.
+# ./libs/sdw (device 66313, inode 2756733): 20 files, no impossibilities.
+# libs/sdw (device 66313, inode 2756733): 20 files, no impossibilities.
 
-# 53 files, no impossibilities in 3 directories.
+# 54 files, no impossibilities in 3 directories.
 
 # Implicit Rules
 
@@ -307,6 +306,7 @@ build/%.o: libs/sdw/%.cpp
 build/CanvasPoint.o:
 #  Implicit rule search has not been done.
 #  Modification time never checked.
+ 
 #  File has not been updated.
 
 # Not a target:
@@ -433,12 +433,12 @@ build/Utils.o:
 
 # No general ('VPATH' variable) search path.
 
-# strcache buffers: 1 (0) / strings = 55 / storage = 724 B / avg = 13 B
-# current buf: size = 8162 B / used = 724 B / count = 55 / avg = 13 B
+# strcache buffers: 1 (0) / strings = 56 / storage = 728 B / avg = 13 B
+# current buf: size = 8162 B / used = 728 B / count = 56 / avg = 13 B
 
-# strcache performance: lookups = 95 / hit rate = 42%
+# strcache performance: lookups = 96 / hit rate = 41%
 # hash-table stats:
-# Load=55/8192=1%, Rehash=0, Collisions=2/95=2%
-# Finished Make data base on Thu Nov 25 13:54:42 2021
+# Load=56/8192=1%, Rehash=0, Collisions=2/96=2%
+# Finished Make data base on Fri Nov 26 13:53:48 2021
 
  
