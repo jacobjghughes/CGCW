@@ -27,6 +27,7 @@
 #define SCALE 50
 #define DEFPOS glm::vec3(0.0, 0.0, 10.0)
 #define DEFROT glm::mat3(1,0,0,0,1,0,0,0,1)
+#define ORIGIN CanvasPoint(0,0,0)
 
 // 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
 
@@ -529,6 +530,9 @@ void readMaterialFile(std::unordered_map<std::string, Colour> &materials, std::s
 				colour = Colour(name,r,g,b);
 				materials.emplace(name,colour);
 			}
+			else if (lineSegments[0] == "map_Kd") {
+				// LOAD TEXTURE
+			}
 		}
 	}
 } 
@@ -609,6 +613,16 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 	triangleList = scaleModelTriangles(triangleList, 0.17);
 }
 
+void lookAt(CanvasPoint p) {
+	glm::vec3 forward, up, right, target;
+	forward = glm::normalize(campos - target);
+	right = glm::normalize(glm::cross(glm::vec3(0,1,0), forward));
+	up = glm::normalize(glm::cross(forward, right));
+
+	// std::cout << vecToCP(forward) << vecToCP(right) << vecToCP(up) << std::endl;
+	camrot = glm::mat3(right, up, forward);
+}
+
 void rotateScene(int dir = 0, float angle = M_PI/16) {
 	glm::mat3 matrix;
 	switch (dir) {
@@ -660,6 +674,7 @@ void rotateScene(int dir = 0, float angle = M_PI/16) {
 	default:
 		break;
 	}
+	lookAt(ORIGIN);
 }
 
 void rotateCamera(int dir = 0, float angle = M_PI/16) {
@@ -715,43 +730,32 @@ void rotateCamera(int dir = 0, float angle = M_PI/16) {
 	}
 }
 
-void lookAt(CanvasPoint p) {
-	glm::vec3 forward, up, right, target;
-	forward = glm::normalize(campos - target);
-	right = glm::normalize(glm::cross(glm::vec3(0,1,0), forward));
-	up = glm::normalize(glm::cross(forward, right));
-
-	// std::cout << vecToCP(forward) << vecToCP(right) << vecToCP(up) << std::endl;
-	camrot = glm::mat3(right, up, forward);
-}
-
 void orbitCamera() {
 	rotateScene(1, 0.01);
-	lookAt(CanvasPoint(0,0,0));
-	
+	lookAt(ORIGIN);
 }
 
 void nudgeCamera(int dir = 0, float mag = 0.1) {
 	switch (dir)
 	{
 	case 1:
-		// left
-		campos.x += mag;
+		// move camera left
+		campos.x -= mag;
 		break;
 	
 	case 2:
-		// right
-		campos.x -= mag;
+		// move camera right
+		campos.x += mag;
 		break;
 
 	case 3:
-		// up
-		campos.y += mag;
+		// move camera up
+		campos.y -= mag;
 		break;
 
 	case 4:
-		// down
-		campos.y -= mag;
+		// move camera down
+		campos.y += mag;
 		break;
 
 	case 5: 
@@ -793,16 +797,16 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 
 		// Rotate camera in XY with IJKL
 		else if (event.key.keysym.sym == SDLK_j ) {
-			rotateCamera(1);
+			rotateScene(1);
 		}
 		else if (event.key.keysym.sym == SDLK_l) {
-			rotateCamera(2);
+			rotateScene(2);
 		}
 		else if (event.key.keysym.sym == SDLK_i ) {
-			rotateCamera(3);
+			rotateScene(3);
 		}
 		else if (event.key.keysym.sym == SDLK_k) {
-			rotateCamera(4);
+			rotateScene(4);
 		}
 		// Camera orbiter toggle Key = P
 		else if (event.key.keysym.sym == SDLK_p) {
