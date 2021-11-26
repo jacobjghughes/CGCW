@@ -62,6 +62,11 @@
             "cwd": "/home/jakehughes/Desktop/CG2021/Weekly Workbooks/04 Wireframes and Rasterising/Wireframes/build",
             "binaryPath": "/home/jakehughes/Desktop/CG2021/Weekly Workbooks/04 Wireframes and Rasterising/Wireframes/build/Wireframes",
             "binaryArgs": []
+        },
+        {
+            "cwd": "/home/jakehughes/Desktop/CGCW/build",
+            "binaryPath": "/home/jakehughes/Desktop/CGCW/build/Wireframes",
+            "binaryArgs": []
         }
     ],
     "cmake.configureOnOpen": true

@@ -17,14 +17,14 @@
 #include <unordered_map>
 #include <cmath>
 
-#define WIDTH 800
-#define HEIGHT 800
+#define WIDTH 300
+#define HEIGHT 300
 #define BRICK "../textures/texture.ppm"
-#define BOX "/home/jakehughes/Desktop/CG2021/Weekly Workbooks/04 Wireframes and Rasterising/Wireframes/models/cornell-box.obj"
+#define BOX "/home/jakehughes/Desktop/CGCW/models/cornell-box.obj"
 // #define BOX "/home/jakehughes/Desktop/CG2021/Weekly Workbooks/04 Wireframes and Rasterising/Wireframes/models/boxes.obj"
-#define MATS "/home/jakehughes/Desktop/CG2021/Weekly Workbooks/04 Wireframes and Rasterising/Wireframes/models/cornell-box.mtl"
+#define MATS "/home/jakehughes/Desktop/CGCW/models/cornell-box.mtl"
 #define FOCLEN 6 // default focal length
-#define SCALE 150
+#define SCALE 50
 #define DEFPOS glm::vec3(0.0, 0.0, 10.0)
 #define DEFROT glm::mat3(1,0,0,0,1,0,0,0,1)
 
@@ -94,11 +94,11 @@ std::vector<glm::vec3> interpolateThreeElementValues(glm::vec3 from, glm::vec3 t
 
 	interpolatedList.push_back(from);
 	for (int i = 1; i < numberOfValues; i++) {
-		if (interpolatedList.back().x > WIDTH || interpolatedList.back().x < 0 || interpolatedList.back().y < 0 || interpolatedList.back().y > HEIGHT) {
+		// if (interpolatedList.back().x > WIDTH || interpolatedList.back().x < 0 || interpolatedList.back().y < 0 || interpolatedList.back().y > HEIGHT) {
 			// std::cout << "x: " << interpolatedList.back().x << " y: " << interpolatedList.back().y << " z: " << interpolatedList.back().z << std::endl;
 			// i = numberOfValues;
-			break;
-		}
+			// break;
+		// }
 		interpolatedList.push_back(interpolatedList.back() + step);
 	}
 	return interpolatedList;
@@ -117,7 +117,7 @@ void drawLine(CanvasPoint from, CanvasPoint to, DrawingWindow &window, Colour c 
 	glm::vec3 vecto = cpToVec(to);
 
 	// if both points are on canvas then draw normally
-	if (inbounds(from) && inbounds(to)) {
+	// if (inbounds(from) && inbounds(to)) {
 		std::vector<glm::vec3> Points = interpolateThreeElementValues(vecfrom, vecto, numberOfValues);
 
 		// for (int i = 0; i < numberOfValues - 1; i++) {
@@ -135,7 +135,7 @@ void drawLine(CanvasPoint from, CanvasPoint to, DrawingWindow &window, Colour c 
 				}	
 			}
 		}
-	}
+	// }
 }
 
 void drawStrokedTriangle(CanvasTriangle t, DrawingWindow &window, Colour c = Colour(230,10,230)) {
@@ -266,7 +266,7 @@ CanvasPoint findIntercept(CanvasTriangle t) {
 void rasterizeTriangle(CanvasTriangle t, DrawingWindow &window, Colour c) {
 
 	t = sortVerticesVertically(t); 
-	drawStrokedTriangle(t, window, c);
+	// drawStrokedTriangle(t, window, c);
 
 	std::vector<CanvasPoint> vertices;
 	vertices.push_back(t.v0());
@@ -715,9 +715,19 @@ void rotateCamera(int dir = 0, float angle = M_PI/16) {
 	}
 }
 
+void lookAt(CanvasPoint p) {
+	glm::vec3 forward, up, right, target;
+	forward = glm::normalize(campos - target);
+	right = glm::normalize(glm::cross(glm::vec3(0,1,0), forward));
+	up = glm::normalize(glm::cross(forward, right));
+
+	// std::cout << vecToCP(forward) << vecToCP(right) << vecToCP(up) << std::endl;
+	camrot = glm::mat3(right, up, forward);
+}
+
 void orbitCamera() {
-	rotateScene(1, 0.05);
-	rotateCamera(2, 0.05);
+	rotateScene(1, 0.01);
+	lookAt(CanvasPoint(0,0,0));
 	
 }
 
@@ -797,6 +807,9 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		// Camera orbiter toggle Key = P
 		else if (event.key.keysym.sym == SDLK_p) {
 			OrbiterToggle = !OrbiterToggle;
+		}
+		else if (event.key.keysym.sym == SDLK_SEMICOLON) {
+			lookAt(CanvasPoint(0,0,0));
 		}
 
 		// else if (event.key.keysym.sym == SDLK_m) readMaterialFile(std::unordered_map<std::string, Colour> materials, MATS);
