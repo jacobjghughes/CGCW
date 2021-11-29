@@ -17,8 +17,8 @@
 #include <unordered_map>
 #include <cmath>
 
-#define WIDTH 300
-#define HEIGHT 300
+#define WIDTH 300 //300
+#define HEIGHT 300 //300
 // #define BRICK "../textures/texture.ppm"
 #define MODELS "/home/jakehughes/Desktop/CGCW/models"
 #define BOX "/home/jakehughes/Desktop/CGCW/models/textured-cornell-box.obj"
@@ -27,6 +27,7 @@
 #define FOCLEN 6 // default focal length
 #define SCALE 50
 #define DEFPOS glm::vec3(0.0, 0.0, 10.0)
+// #define DEFPOS glm::vec3(0.0, 0.0, 10.0)
 #define DEFROT glm::mat3(1,0,0,0,1,0,0,0,1)
 #define ORIGIN CanvasPoint(0,0,0)
 
@@ -75,6 +76,13 @@ bool inbounds(CanvasPoint p) {
 	else if (p.depth < 0) return false; 
 	else return true;
 }
+
+bool inbounds(int x, int y) {
+	if (x <= 0 || x >= WIDTH) return false;
+	else if (y <= 0 || y >= HEIGHT) return false;
+	else return true;
+}
+
 
 std::vector<glm::lowp_vec3> interpolateLowPVec(glm::lowp_vec3 from, glm::lowp_vec3 to, int numberOfValues) {
 	std::vector<glm::lowp_vec3> interpolatedList;
@@ -679,6 +687,49 @@ void textureTriangle(ModelTriangle t, DrawingWindow &window, int textureIndex = 
 	drawStrokedTriangle(t,window,Colour(255,255,255));
 }
 
+Colour getClosestIntersection(glm::vec3 directionVector) {
+	glm::vec3 closestPoint (INFINITY,0,0);
+	Colour closestColour (0,0,0);
+
+	for (int i = 0; i < triangleList.size(); i++) {
+
+		glm::vec3 e0 = triangleList[i].vertices[1] - triangleList[i].vertices[0];
+		glm::vec3 e1 = triangleList[i].vertices[2] - triangleList[i].vertices[0];
+		glm::vec3 SPVector = campos - triangleList[i].vertices[0];
+		glm::mat3 DEMatrix(-directionVector, e0, e1);
+		glm::vec3 possibleSolution = glm::inverse(DEMatrix) * SPVector;
+
+		if (possibleSolution.x < closestPoint.x && possibleSolution.x > 0 && possibleSolution.y <= 1 && possibleSolution.y >= 0 && possibleSolution.z <= 1 && possibleSolution.z >= 0 && (possibleSolution.y + possibleSolution.z <= 1)) {
+			closestPoint = possibleSolution;
+			closestColour = triangleList[i].colour;
+		}
+	}
+	// std::cout << closestPoint.x << std::endl;
+	return closestColour;
+}
+
+void raytraceScene(DrawingWindow &window) {
+	for (int ys = 0; ys < HEIGHT; ys++) {
+		for (int xs = 0; xs < WIDTH; xs++) {
+			// get vector from camera to point on plane
+			// point on plane defined
+			glm::vec3 planePoint(xs -float(WIDTH/2), - ys + HEIGHT/2, -FOCLEN);
+			planePoint.x /= (SCALE);
+			planePoint.y /= (SCALE);
+			// vector from camera position to point
+			glm::vec3 directionVector = planePoint - campos;
+			directionVector = camrot * directionVector;
+			directionVector = glm::normalize(directionVector);
+			// std::cout << "x: " << directionVector.x << " y: " << directionVector.y << " z: " << directionVector.z << std::endl;
+
+			if (inbounds(xs, ys)) {
+				window.setPixelColour(xs, ys, ColourToInt(getClosestIntersection(directionVector)));
+			}
+			// point = campos + directionVector * scalar
+		}
+	}
+}
+
 CanvasPoint scalePoint(CanvasPoint p, float scaleFactor) {
 	p.x *= scaleFactor;
 	p.y *= scaleFactor;
@@ -719,43 +770,51 @@ void clearScene(DrawingWindow &window) {
 }
 
 void draw(DrawingWindow &window) {
+	// if rendering scene as a whole (raytracing)
+	if (renderStyle == 3) {
+		raytraceScene(window);
+	}
+	// else looping through triangles (rasterising)
+	else {
 	// for (int i = 0; i < 12; i++) { // no boxes
 	// for (int i = 12; i < 22; i++) { // red box
 	// for (int i = 22; i < 32; i++) { // blue box
 	// for (int i = 12; i < triangleList.size(); i++) { // both boxes
-	for (int i = 0; i < triangleList.size(); i++) { //whole scene
-		ModelTriangle t = triangleList[i];
-		// CanvasTriangle t;
-		Colour colour(triangleList[i].colour);
+		for (int i = 0; i < triangleList.size(); i++) { //whole scene
+			ModelTriangle t = triangleList[i];
+			// CanvasTriangle t;
+			Colour colour(triangleList[i].colour);
 
-		for (int j = 0; j < 3; j++) {
-			CanvasPoint p = getCanvasIntersectionPoint(triangleList[i].vertices[j]);
-			t.vertices[j].x = p.x;
-			t.vertices[j].y = p.y;
-			t.vertices[j].z = p.depth;
-		}
+			for (int j = 0; j < 3; j++) {
+				CanvasPoint p = getCanvasIntersectionPoint(triangleList[i].vertices[j]);
+				t.vertices[j].x = p.x;
+				t.vertices[j].y = p.y;
+				t.vertices[j].z = p.depth;
+			}
 
-		// switch case for changing render style 
-		// 1 - wireframes
-		// 2 - rasterising 
-		// std::string colourname = colour.name;
-		switch (renderStyle) {
-			case 1:
-				drawStrokedTriangle(t, window, colour);
-				break;
-			
-			case 2: 
-				/// NEED TO IMPLEMENT TEXTURE DETECTION + GET TEXTURES DRAWING PROPERLY
-				if (t.texturePoints[0].x > 0) {
-					textureTriangle(t, window);
-				}
-				else {
-					rasterizeTriangle(modelToCanvas(t), window, colour);
-				}
-				break;
+			// switch case for changing render style 
+			// 1 - wireframes
+			// 2 - rasterising 
+			// 3 - raytracing
+			// std::string colourname = colour.name;
+			switch (renderStyle) {
+				case 1:
+					drawStrokedTriangle(t, window, colour);
+					break;
+				
+				case 2: 
+					/// NEED TO IMPLEMENT TEXTURE DETECTION + GET TEXTURES DRAWING PROPERLY
+					if (t.texturePoints[0].x > 0) {
+						textureTriangle(t, window);
+					}
+					else {
+						rasterizeTriangle(modelToCanvas(t), window, colour);
+					}
+					break;
 
-			default:
-				break;
+				default:
+					break;
+			}
 		}
 	}
 }
@@ -931,58 +990,58 @@ void rotateScene(int dir = 0, float angle = M_PI/16) {
 	lookAt(ORIGIN);
 }
 
-void rotateCamera(int dir = 0, float angle = M_PI/16) {
-	glm::mat3 matrix;
-	switch (dir) {
-	case 1:
-		// rotate left (about y) key: J
-		matrix = glm::mat3(
-			cos(angle), 0, -sin(angle),
-			         0, 1, 0,
-			sin(angle), 0, cos(angle)
-		);
-		// campos = matrix * campos;
-		camrot = matrix * camrot;
-		break;
+// void rotateCamera(int dir = 0, float angle = M_PI/16) {
+// 	glm::mat3 matrix;
+// 	switch (dir) {
+// 	case 1:
+// 		// rotate left (about y) key: J
+// 		matrix = glm::mat3(
+// 			cos(angle), 0, -sin(angle),
+// 			         0, 1, 0,
+// 			sin(angle), 0, cos(angle)
+// 		);
+// 		// campos = matrix * campos;
+// 		camrot = matrix * camrot;
+// 		break;
 		
 	
-	case 2:
-		// rotate right (about y) key: L
-		matrix = glm::mat3(
-			cos(-angle), 0, -sin(-angle),
-			          0, 1, 0,
-			sin(-angle), 0, cos(-angle)
-		);
-		// campos = matrix * campos;
-		camrot = matrix * camrot;
-		break;
+// 	case 2:
+// 		// rotate right (about y) key: L
+// 		matrix = glm::mat3(
+// 			cos(-angle), 0, -sin(-angle),
+// 			          0, 1, 0,
+// 			sin(-angle), 0, cos(-angle)
+// 		);
+// 		// campos = matrix * campos;
+// 		camrot = matrix * camrot;
+// 		break;
 	
-	case 3:
-		// rotate up (about x) key I
-		matrix = glm::mat3(
-			1,           0, 0,
-			0,  cos(angle), sin(angle),
-			0, -sin(angle), cos(angle)
-		);
-		// campos = matrix * campos;
-		camrot = matrix * camrot;
-		break;
+// 	case 3:
+// 		// rotate up (about x) key I
+// 		matrix = glm::mat3(
+// 			1,           0, 0,
+// 			0,  cos(angle), sin(angle),
+// 			0, -sin(angle), cos(angle)
+// 		);
+// 		// campos = matrix * campos;
+// 		camrot = matrix * camrot;
+// 		break;
 	
-	case 4:
-		// rotate down (about x) key K
-		matrix = glm::mat3(
-			1,            0, 0,
-			0,  cos(-angle), sin(-angle),
-			0, -sin(-angle), cos(-angle)
-		);		
-		// campos = matrix * campos;
-		camrot = matrix * camrot;
-		break;
+// 	case 4:
+// 		// rotate down (about x) key K
+// 		matrix = glm::mat3(
+// 			1,            0, 0,
+// 			0,  cos(-angle), sin(-angle),
+// 			0, -sin(-angle), cos(-angle)
+// 		);		
+// 		// campos = matrix * campos;
+// 		camrot = matrix * camrot;
+// 		break;
 	
-	default:
-		break;
-	}
-}
+// 	default:
+// 		break;
+// 	}
+// }
 
 void orbitCamera() {
 	rotateScene(1, 0.01);
