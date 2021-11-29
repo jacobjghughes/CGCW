@@ -50,6 +50,15 @@ glm::vec3 cpToVec(CanvasPoint p) {
 	return vec;
 }
 
+CanvasTriangle modelToCanvas(ModelTriangle mt) {
+	CanvasTriangle ct;
+	for (int i = 0; i < 3; i++) {
+		ct.vertices[i] = vecToCP(mt.vertices[i]);
+		ct.vertices[i].texturePoint = mt.texturePoints[i];
+	}
+	return ct;
+}
+
 glm::vec3 cpToLowPVec(CanvasPoint p) {
 	glm::lowp_vec3 vec(p.x, p.y, p.depth);
 	return vec;
@@ -151,10 +160,59 @@ void drawLine(CanvasPoint from, CanvasPoint to, DrawingWindow &window, Colour c 
 	}
 }
 
+void drawStrokedTriangle(ModelTriangle t, DrawingWindow &window, Colour c = Colour(230,10,230)) {
+	drawLine(vecToCP(t.vertices[0]), vecToCP(t.vertices[1]), window, c);
+	drawLine(vecToCP(t.vertices[0]), vecToCP(t.vertices[2]), window, c);
+	drawLine(vecToCP(t.vertices[1]), vecToCP(t.vertices[2]), window, c);
+	
+	// drawLine(t.v0(), t.v1(), window, c);
+	// drawLine(t.v0(), t.v2(), window, c);
+	// drawLine(t.v1(), t.v2(), window, c);
+}
+
 void drawStrokedTriangle(CanvasTriangle t, DrawingWindow &window, Colour c = Colour(230,10,230)) {
 	drawLine(t.v0(), t.v1(), window, c);
 	drawLine(t.v0(), t.v2(), window, c);
 	drawLine(t.v1(), t.v2(), window, c);
+}
+
+ModelTriangle sortVerticesVertically(ModelTriangle t) {
+	// add triangle points to list of vertices
+	std::vector<glm::vec3> vertices;
+	vertices.push_back(t.vertices[0]);
+	vertices.push_back(t.vertices[1]);
+	vertices.push_back(t.vertices[2]);
+
+	// sort vertices vertically 
+	if (t.vertices[0].y > t.vertices[1].y) {
+		std::swap(t.vertices[0],t.vertices[1]);
+		std::swap(t.texturePoints[0], t.texturePoints[1]);
+		
+		if (t.vertices[0].y > t.vertices[2].y) {
+			std::swap(t.vertices[0],t.vertices[2]);
+			std::swap(t.texturePoints[0], t.texturePoints[2]);
+		}
+		if (t.vertices[1].y > t.vertices[2].y) {
+			std::swap(t.vertices[1],t.vertices[2]);
+			std::swap(t.texturePoints[1], t.texturePoints[2]);
+		}
+	}
+
+	else if (t.vertices[0].y > t.vertices[2].y) {
+		std::swap(t.vertices[0],t.vertices[2]);
+		std::swap(t.texturePoints[0], t.texturePoints[2]);
+
+		if (t.vertices[1].y > t.vertices[2].y) {
+			std::swap(t.vertices[1],t.vertices[2]);
+			std::swap(t.texturePoints[1], t.texturePoints[2]);
+		}
+	}
+
+	else if (t.vertices[1].y > t.vertices[2].y) {
+		std::swap(t.vertices[1],t.vertices[2]);
+		std::swap(t.texturePoints[1], t.texturePoints[2]);
+	}
+	return t;
 }
 
 CanvasTriangle sortVerticesVertically(CanvasTriangle t) {
@@ -198,10 +256,31 @@ CanvasTriangle sortTopTriangle(CanvasTriangle t) {
 	return t;
 }
 
+ModelTriangle sortTopTriangle(ModelTriangle t) {
+	t = sortVerticesVertically(t);
+	if(t.vertices[1].x > t.vertices[2].x) {
+		std::swap(t.vertices[1],t.vertices[2]);
+		std::swap(t.texturePoints[1], t.texturePoints[2]);
+	}
+	return t;
+}
+
 CanvasTriangle sortBottomTriangle(CanvasTriangle t) {
 	t = sortVerticesVertically(t);
 	std::swap(t.v2(), t.v0());
 	if(t.v1().x > t.v2().x) std::swap(t.v1(),t.v2());
+	return t;
+}
+
+ModelTriangle sortBottomTriangle(ModelTriangle t) {
+	t = sortVerticesVertically(t);
+	std::swap(t.vertices[2], t.vertices[0]);
+	std::swap(t.texturePoints[2], t.texturePoints[0]);
+
+	if(t.vertices[1].x > t.vertices[2].x) {
+		std::swap(t.vertices[1],t.vertices[2]);
+		std::swap(t.texturePoints[1], t.texturePoints[2]);
+	}
 	return t;
 }
 
@@ -236,12 +315,31 @@ CanvasPoint findIntercept(CanvasTriangle t) {
 	return intercept;
 }
 
+CanvasPoint findIntercept(ModelTriangle t) {
+	float verticalHeight = (abs(t.vertices[2].y - t.vertices[0].y));
+	float interceptHeight = (abs(t.vertices[1].y - t.vertices[0].y));
+	float ratio = interceptHeight / verticalHeight;
+
+	CanvasPoint intercept(lineRatio(vecToCP(t.vertices[0]), vecToCP(t.vertices[2]), ratio));
+	intercept.texturePoint = TexturePoint(lineRatio(t.texturePoints[0], t.texturePoints[2], ratio));
+	return intercept;
+}
+
 TexturePoint findTexturePointIntercept(CanvasTriangle t) {
 	float verticalHeight = (abs(t.v2().y - t.v0().y));
 	float interceptHeight = (abs(t.v1().y - t.v0().y));
 	float ratio = interceptHeight / verticalHeight;
 
 	TexturePoint intercept(lineRatio(t.v0().texturePoint, t.v2().texturePoint, ratio));
+	return intercept;
+}
+
+TexturePoint findTexturePointIntercept(ModelTriangle t) {
+	float verticalHeight = (abs(t.vertices[2].y - t.vertices[0].y));
+	float interceptHeight = (abs(t.vertices[1].y - t.vertices[0].y));
+	float ratio = interceptHeight / verticalHeight;
+
+	TexturePoint intercept(lineRatio(t.texturePoints[0], t.texturePoints[2], ratio));
 	return intercept;
 }
 
@@ -444,33 +542,40 @@ uint32_t getTexturePixel(TexturePoint p, TextureMap &map) {
 	return map.pixels[(round(p.y) * map.width) + round(p.x)];
 }
 
-void textureTriangle(CanvasTriangle t, DrawingWindow &window, int textureIndex) {
-	std::cout << textureList.at(textureIndex) << std::endl;
+void textureTriangle(ModelTriangle t, DrawingWindow &window, int textureIndex = 0) {
+	// std::cout << textureList.at(textureIndex) << std::endl;
 	TextureMap texture(textureList.at(textureIndex));
+	// convert texture percentages to texture coordinates from loaded texture 
+	for (int i = 0; i < 3; i++) {
+		t.texturePoints[i].x *= texture.width;
+		t.texturePoints[i].y *= texture.height;
+	}
+	
+	// std::cout << texture << std::endl;
 	// MAKE A TEXTUREMAP DICTIONARY
 
 	t = sortVerticesVertically(t); 
 
-	std::vector<CanvasPoint> vertices;
-	vertices.push_back(t.v0());
-	vertices.push_back(t.v1());
-	vertices.push_back(t.v2());
+	// std::vector<CanvasPoint> vertices;
+	// vertices.push_back(t.v0());
+	// vertices.push_back(t.v1());
+	// vertices.push_back(t.v2());
 
-	CanvasTriangle topT; 
-	CanvasTriangle botT;
+	ModelTriangle topT; 
+	ModelTriangle botT;
 
 	bool flatTop = false;
 	bool flatBot = false;
 
 	// checks the triangle to see if it already has a flat top or bottom
 	// bottom triangle (flat top)
-	if (floor(vertices[0].y) == floor(vertices[1].y)) {
+	if (floor(t.vertices[0].y) == floor(t.vertices[1].y)) {
 		flatTop = true;
 		botT = sortBottomTriangle(t);
 	}
 
 	// top triangle (flat bottom)
-	if (floor(vertices[1].y) == floor(vertices[2].y)) {
+	if (floor(t.vertices[1].y) == floor(t.vertices[2].y)) {
 		flatBot = true;
 		topT = sortTopTriangle(t);
 	}
@@ -478,16 +583,32 @@ void textureTriangle(CanvasTriangle t, DrawingWindow &window, int textureIndex) 
 	if (!flatTop && !flatBot) {
 		// creates new point intercept which is the horizontal intercept at the y value of the middle vertex
 		CanvasPoint intercept(findIntercept(t));
-		intercept.texturePoint = findTexturePointIntercept(t);
-		botT = sortBottomTriangle(CanvasTriangle(intercept, vertices[1], vertices[2]));
-		topT = sortTopTriangle(CanvasTriangle(intercept, vertices[0], vertices[1]));
+		// intercept.texturePoint = findTexturePointIntercept(t);
+
+		topT = ModelTriangle(cpToVec(intercept), t.vertices[0], t.vertices[1], t.colour);
+		topT.texturePoints = {intercept.texturePoint, t.texturePoints[0], t.texturePoints[1]};
+		topT = sortTopTriangle(topT);
+
+		botT = ModelTriangle(cpToVec(intercept), t.vertices[1], t.vertices[2], t.colour);
+		botT.texturePoints = {intercept.texturePoint, t.texturePoints[1], t.texturePoints[2]};
+		botT = sortBottomTriangle(botT);
 	}
 
 	if (!flatTop) {	
 		// Interpolate left and right points on top triangle and corresponding texturepoints
-		int height = abs(round(topT.v1().y - topT.v0().y));// * 2;
-		std::vector<CanvasPoint> ApexLeftY  = interpolateTexturePoints(topT.v0(), topT.v1(), height);
-		std::vector<CanvasPoint> ApexRightY = interpolateTexturePoints(topT.v0(), topT.v2(), height);
+		int height = abs(round(topT.vertices[1].y - topT.vertices[0].y));// * 2;
+		CanvasPoint Apex, Left, Right;
+		Apex = vecToCP(topT.vertices[0]);
+		Apex.texturePoint = topT.texturePoints[0];
+
+		Left = vecToCP(topT.vertices[1]);
+		Left.texturePoint = topT.texturePoints[1];
+
+		Right = vecToCP(topT.vertices[2]);
+		Right.texturePoint = topT.texturePoints[2];
+
+		std::vector<CanvasPoint> ApexLeftY  = interpolateTexturePoints(Apex, Left, height);
+		std::vector<CanvasPoint> ApexRightY = interpolateTexturePoints(Apex, Right, height);
 
 		// draw horizontal lines between [apex,left]@ys and [apex,right]@ys
 		for (int ys = 0; ys < height; ys++) {
@@ -496,7 +617,12 @@ void textureTriangle(CanvasTriangle t, DrawingWindow &window, int textureIndex) 
 			// interpolate rake row on texture points
 			std::vector<CanvasPoint> rakeRow = interpolateTexturePoints(ApexLeftY[ys],ApexRightY[ys], width);
 			for (int xs = 0; xs < width; xs++) {
-				CanvasPoint p(rakeRow[xs]);
+				CanvasPoint p;
+				p.x = round(rakeRow[xs].x);
+				p.y = round(rakeRow[xs].y);
+				p.depth = round(rakeRow[xs].depth);
+				p.texturePoint.x = round(rakeRow[xs].texturePoint.x);
+				p.texturePoint.y = round(rakeRow[xs].texturePoint.y);
 				int index = p.y * WIDTH + p.x;
 
 				if (inbounds(p) && index < WIDTH*HEIGHT && index >= 0) {
@@ -511,9 +637,20 @@ void textureTriangle(CanvasTriangle t, DrawingWindow &window, int textureIndex) 
 
 	if (!flatBot) {
 		// Interpolate left and right points on bot triangle and corresponding texturepoints
-		int height = abs(round(botT.v1().y - botT.v0().y));// * 2;
-		std::vector<CanvasPoint> ApexLeftY  = interpolateTexturePoints(botT.v0(), botT.v1(), height);
-		std::vector<CanvasPoint> ApexRightY = interpolateTexturePoints(botT.v0(), botT.v2(), height);
+		int height = abs(round(botT.vertices[1].y - botT.vertices[0].y));// * 2;
+		CanvasPoint Apex, Left, Right;
+		Apex = vecToCP(botT.vertices[0]);
+		Apex.texturePoint = botT.texturePoints[0];
+
+		Left = vecToCP(botT.vertices[1]);
+		Left.texturePoint = botT.texturePoints[1];
+
+		Right = vecToCP(botT.vertices[2]);
+		Right.texturePoint = botT.texturePoints[2];
+
+		std::vector<CanvasPoint> ApexLeftY  = interpolateTexturePoints(Apex, Left, height);
+		std::vector<CanvasPoint> ApexRightY = interpolateTexturePoints(Apex, Right, height);
+
 
 		// draw horizontal lines between [apex,left]@ys and [apex,right]@ys
 		for (int ys = 0; ys < height; ys++) {
@@ -522,7 +659,12 @@ void textureTriangle(CanvasTriangle t, DrawingWindow &window, int textureIndex) 
 			// interpolate rake row on texture points
 			std::vector<CanvasPoint> rakeRow = interpolateTexturePoints(ApexLeftY[ys],ApexRightY[ys], width);
 			for (int xs = 0; xs < width; xs ++) {
-				CanvasPoint p(rakeRow[xs]);
+				CanvasPoint p;
+				p.x = round(rakeRow[xs].x);
+				p.y = round(rakeRow[xs].y);
+				p.depth = round(rakeRow[xs].depth);
+				p.texturePoint.x = round(rakeRow[xs].texturePoint.x);
+				p.texturePoint.y = round(rakeRow[xs].texturePoint.y);
 				int index = p.y * WIDTH + p.x;
 
 				if (inbounds(p) && index < WIDTH*HEIGHT && index >= 0) {
@@ -582,14 +724,15 @@ void draw(DrawingWindow &window) {
 	// for (int i = 22; i < 32; i++) { // blue box
 	// for (int i = 12; i < triangleList.size(); i++) { // both boxes
 	for (int i = 0; i < triangleList.size(); i++) { //whole scene
-		CanvasTriangle t;
+		ModelTriangle t = triangleList[i];
+		// CanvasTriangle t;
 		Colour colour(triangleList[i].colour);
 
 		for (int j = 0; j < 3; j++) {
 			CanvasPoint p = getCanvasIntersectionPoint(triangleList[i].vertices[j]);
 			t.vertices[j].x = p.x;
 			t.vertices[j].y = p.y;
-			t.vertices[j].depth = p.depth;
+			t.vertices[j].z = p.depth;
 		}
 
 		// switch case for changing render style 
@@ -610,12 +753,11 @@ void draw(DrawingWindow &window) {
 				// }
 
 				/// NEED TO IMPLEMENT TEXTURE DETECTION + GET TEXTURES DRAWING PROPERLY
-				if (colour.name.compare("Cobbles") == 0) {
-					std::cout << colour.red << std::endl;
-					textureTriangle(t, window, -colour.red);
+				if (t.texturePoints[0].x > 0) {
+					textureTriangle(t, window);
 				}
 				else {
-					rasterizeTriangle(t, window, colour);
+					rasterizeTriangle(modelToCanvas(t), window, colour);
 				}
 				break;
 
@@ -652,19 +794,11 @@ void readMaterialFile(std::unordered_map<std::string, Colour> &materials, std::s
 				materials.emplace(name,colour);
 			}
 			else if (lineSegments[0] == "map_Kd") {
-				// if mtl is a texturemap, set the colour name to "texture_[name]"
-				// and set the r value to the texture index
-				// emplace the ppm path into texturelist (with index = colour.r)
-				
-				
+				// add the texture to the textureList
 				std::string texturePath = MODELS;
 				texturePath.append("/" + lineSegments[1]);
 				textureList.emplace_back(texturePath);
-				// colour.name = "texture" + name;
-				// colour.red  = textureCount;
-				// std::cout << texturePath << std::endl;
 				
-				materials.at(name).red = -textureCount;
 				textureCount++;
 			}
 		}
@@ -675,6 +809,7 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 	std::ifstream file(filename, std::ifstream::in);	
 	std::string readLine;
 	std::vector<glm::vec3> vertexList;
+	std::vector<TexturePoint> texturePointList;
 	std::unordered_map<std::string, Colour> materials;
 	Colour currentMaterial;
 
@@ -699,13 +834,38 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 
 				vertexList.push_back(glm::vec3(x,y,z));
 			}
+			else if (lineSegments[0] == "vt") {
+				float x, y;
+				x = std::stof(lineSegments[1]);
+				y = std::stof(lineSegments[2]);
+				texturePointList.push_back(TexturePoint(x,y));
+			}
+
 			else if (lineSegments[0] == "f") {
-				int a, b, c;
+				int a, b, c, ta, tb, tc;
 				a = std::stoi(lineSegments[1]) - 1;
 				b = std::stoi(lineSegments[2]) - 1;
 				c = std::stoi(lineSegments[3]) - 1;
 
-				triangleList.push_back(ModelTriangle(vertexList[a], vertexList[b], vertexList[c], currentMaterial));
+				ModelTriangle face(vertexList[a], vertexList[b], vertexList[c], currentMaterial);
+
+				if (!split(lineSegments[1], '/').at(1).empty()){
+					ta = std::stoi(split(lineSegments[1], '/').at(1)) - 1;
+					tb = std::stoi(split(lineSegments[2], '/').at(1)) - 1;
+					tc = std::stoi(split(lineSegments[3], '/').at(1)) - 1;
+					face.texturePoints[0] = texturePointList[ta];
+					face.texturePoints[1] = texturePointList[tb];
+					face.texturePoints[2] = texturePointList[tc];
+				}
+				else {
+					TexturePoint tp(-1,-1);
+					face.texturePoints[0] = tp;
+					face.texturePoints[1] = tp;
+					face.texturePoints[2] = tp;
+
+				}	
+
+				triangleList.push_back(face);
 			}
 			else if (lineSegments[0] == "usemtl") {
 				currentMaterial = materials.at(lineSegments[1]);
