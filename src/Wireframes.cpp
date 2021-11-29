@@ -745,13 +745,6 @@ void draw(DrawingWindow &window) {
 				break;
 			
 			case 2: 
-				// get the name of the colour, if it starts with texture then texturise it
-				// otherwise rasterise
-				// std::cout << colour.name.substr(0,7) << std::endl;
-				// if (colour.name.substr(0,7).compare("texture") == 0) {
-				// 	textureTriangle(t, window, colour.red);
-				// }
-
 				/// NEED TO IMPLEMENT TEXTURE DETECTION + GET TEXTURES DRAWING PROPERLY
 				if (t.texturePoints[0].x > 0) {
 					textureTriangle(t, window);
@@ -764,10 +757,6 @@ void draw(DrawingWindow &window) {
 			default:
 				break;
 		}
-
-		// IF WIREFRAME :
-		// IF RASTERISING :
-		// IF TEXTURED : 
 	}
 }
 
