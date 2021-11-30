@@ -1,4 +1,6 @@
 /usr/bin/make all --print-data-base --no-builtin-variables --no-builtin-rules --question
+make: *** No rule to make target 'all'.  Stop.
+ 
 # GNU Make 4.2.1
 # Built for x86_64-pc-linux-gnu
 # Copyright (C) 1988-2016 Free Software Foundation, Inc.
@@ -6,7 +8,7 @@
 # This is free software: you are free to change and redistribute it.
 # There is NO WARRANTY, to the extent permitted by law.
 
-# Make data base, printed on Mon Nov 29 19:23:14 2021
+# Make data base, printed on Tue Nov 30 18:48:02 2021
 
 # Variables
 
@@ -99,7 +101,7 @@ SDL_COMPILER_FLAGS := -I/usr/include/SDL2 -D_REENTRANT
 # environment
 GPG_AGENT_INFO = /run/user/1000/gnupg/S.gpg-agent:0:1
 # environment
-SESSION_MANAGER = local/JHInspiron:@/tmp/.ICE-unix/1409,unix/JHInspiron:/tmp/.ICE-unix/1409
+SESSION_MANAGER = local/JHInspiron:@/tmp/.ICE-unix/1395,unix/JHInspiron:/tmp/.ICE-unix/1395
 # environment
 XDG_RUNTIME_DIR = /run/user/1000
 # makefile (from 'Makefile', line 25)
@@ -121,7 +123,7 @@ XDG_SESSION_DESKTOP = pantheon
 # environment
 SSH_AUTH_SOCK = /run/user/1000/keyring/ssh
 # environment
-GIO_LAUNCHED_DESKTOP_FILE_PID = 5532
+GIO_LAUNCHED_DESKTOP_FILE_PID = 2680
 # automatic
 %F = $(notdir $%)
 # environment
@@ -137,7 +139,7 @@ QT_QPA_PLATFORMTHEME = gtk3
 # default
 .LOADED := 
 # environment
-SSH_AGENT_PID = 1520
+SSH_AGENT_PID = 1502
 # environment
 ORIGINAL_XDG_CURRENT_DESKTOP = Pantheon
 # environment
@@ -177,7 +179,7 @@ OBJECT_FILE := build/Wireframes.o
 # makefile (from 'Makefile', line 3)
 BUILD_DIR := build
 # environment
-VSCODE_IPC_HOOK_EXTHOST = /run/user/1000/vscode-ipc-161074f7-7008-49ee-ac90-ab8d76cfd07e.sock
+VSCODE_IPC_HOOK_EXTHOST = /run/user/1000/vscode-ipc-7267d721-0a5d-4c38-9ba1-e0c80cff40d7.sock
 # default
 MAKE_VERSION := 4.2.1
 # environment
@@ -273,7 +275,7 @@ LC_ADDRESS = en_GB.UTF-8
 # environment
 LANG = C
 # environment
-VSCODE_PID = 5532
+VSCODE_PID = 2680
 # variable set hash-table stats:
 # Load=132/1024=13%, Rehash=0, Collisions=14/182=8%
 
@@ -292,9 +294,6 @@ VSCODE_PID = 5532
 # Implicit Rules
 
 build/%.o: libs/sdw/%.cpp
- 
-make: *** No rule to make target 'all'.  Stop.
- 
 #  recipe to execute (from 'Makefile', line 63):
 	@mkdir -p $(BUILD_DIR)
 	$(COMPILER) $(COMPILER_OPTIONS) -c -o $@ $^ $(SDL_COMPILER_FLAGS) $(GLM_COMPILER_FLAGS)
@@ -380,6 +379,7 @@ clean:
 # Not a target:
 build/TextureMap.o:
 #  Implicit rule search has not been done.
+ 
 #  Modification time never checked.
 #  File has not been updated.
 
@@ -439,6 +439,6 @@ build/Utils.o:
 # strcache performance: lookups = 97 / hit rate = 41%
 # hash-table stats:
 # Load=57/8192=1%, Rehash=0, Collisions=2/97=2%
-# Finished Make data base on Mon Nov 29 19:23:14 2021
+# Finished Make data base on Tue Nov 30 18:48:02 2021
 
  

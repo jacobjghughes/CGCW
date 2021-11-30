@@ -1,4 +1,4 @@
-/usr/bin/make --dry-run --always-make --keep-going --print-directory
+/usr/bin/make debug --dry-run --always-make --keep-going --print-directory
 make: Entering directory '/home/jakehughes/Desktop/CGCW'
 mkdir -p build
 clang++ -c -pipe -Wall -std=c++11  -c -o build/CanvasTriangle.o libs/sdw/CanvasTriangle.cpp -I/usr/include/SDL2 -D_REENTRANT -I./libs/glm-0.9.7.2/

@@ -11,6 +11,7 @@
 #include <TextureMap.h>
 #include <TexturePoint.h>
 #include <ModelTriangle.h>
+#include <RayTriangleIntersection.h>
 #include <fstream>
 #include <string>
 #include <iostream>
@@ -36,6 +37,7 @@
 bool OrbiterToggle;
 glm::vec3 campos(0.0, 0.0, 10.0); 
 float depthBuffer[WIDTH * HEIGHT];
+std::vector<glm::vec3> lightList;
 std::vector<ModelTriangle> triangleList;
 std::vector<std::string> textureList;
 glm::mat3 camrot(DEFROT);
@@ -81,6 +83,22 @@ bool inbounds(int x, int y) {
 	if (x <= 0 || x >= WIDTH) return false;
 	else if (y <= 0 || y >= HEIGHT) return false;
 	else return true;
+}
+
+bool inrange(int x, int y, float min, float max) {
+	if (x < min || x > max) return false;
+	else if (y < min || y > max) return false;
+	else return true;
+}
+
+bool verifyTexturePoints(std::array<TexturePoint, 3> points) {
+	for (int i = 0; i < 3; i++) {
+		if ((points[i].x > 0 || points[i].y > 0)) {
+			std::cout << "index: " << i << " tpx: " << points[i].x << " tpy: " << points[i].y << std::endl;
+			return true;
+		}
+	}
+	return false;
 }
 
 
@@ -687,28 +705,50 @@ void textureTriangle(ModelTriangle t, DrawingWindow &window, int textureIndex = 
 	drawStrokedTriangle(t,window,Colour(255,255,255));
 }
 
-Colour getClosestIntersection(glm::vec3 directionVector) {
-	glm::vec3 closestPoint (INFINITY,0,0);
-	Colour closestColour (0,0,0);
+RayTriangleIntersection getClosestIntersection(glm::vec3 directionVector, glm::vec3 startpos = campos, int ignoreIndex = -1) {
+	RayTriangleIntersection intersection;
+	intersection.distanceFromCamera = INFINITY;
 
 	for (int i = 0; i < triangleList.size(); i++) {
+		
+		if (i == ignoreIndex) continue;
 
 		glm::vec3 e0 = triangleList[i].vertices[1] - triangleList[i].vertices[0];
 		glm::vec3 e1 = triangleList[i].vertices[2] - triangleList[i].vertices[0];
-		glm::vec3 SPVector = campos - triangleList[i].vertices[0];
+		glm::vec3 SPVector = startpos - triangleList[i].vertices[0];
 		glm::mat3 DEMatrix(-directionVector, e0, e1);
 		glm::vec3 possibleSolution = glm::inverse(DEMatrix) * SPVector;
 
-		if (possibleSolution.x < closestPoint.x && possibleSolution.x > 0 && possibleSolution.y <= 1 && possibleSolution.y >= 0 && possibleSolution.z <= 1 && possibleSolution.z >= 0 && (possibleSolution.y + possibleSolution.z <= 1)) {
-			closestPoint = possibleSolution;
-			closestColour = triangleList[i].colour;
+		if (possibleSolution.x < intersection.distanceFromCamera && possibleSolution.x > 0 
+			&& possibleSolution.y <= 1 && possibleSolution.y >= 0 
+			&& possibleSolution.z <= 1 && possibleSolution.z >= 0 
+			&& (possibleSolution.y + possibleSolution.z <= 1)) {
+
+				intersection.distanceFromCamera = possibleSolution.x;
+				intersection.intersectedTriangle = triangleList[i];
+				intersection.intersectionPoint = glm::vec3(triangleList[i].vertices[0] + possibleSolution.y * e0 + possibleSolution.z * e1);
+				intersection.triangleIndex = i;
+				intersection.solution = possibleSolution;
 		}
 	}
+
+
 	// std::cout << closestPoint.x << std::endl;
-	return closestColour;
+	return intersection;
 }
 
-void raytraceScene(DrawingWindow &window) {
+bool shadowTrace(RayTriangleIntersection projectedPoint) {
+	glm::vec3 light(0, 0.3, 0);
+	// cast shadow ray from point to selected light
+	glm::vec3 shadowRay = light - projectedPoint.intersectionPoint;
+	float distanceToLight = glm::length(shadowRay);
+	shadowRay = glm::normalize(shadowRay);
+	
+	RayTriangleIntersection shadowIntersection = getClosestIntersection(shadowRay, projectedPoint.intersectionPoint, projectedPoint.triangleIndex);
+	return (shadowIntersection.distanceFromCamera < distanceToLight);
+}
+
+void raytraceScene(DrawingWindow &window, bool shadowsOn = false) {
 	for (int ys = 0; ys < HEIGHT; ys++) {
 		for (int xs = 0; xs < WIDTH; xs++) {
 			// get vector from camera to point on plane
@@ -720,12 +760,45 @@ void raytraceScene(DrawingWindow &window) {
 			glm::vec3 directionVector = planePoint - campos;
 			directionVector = camrot * directionVector;
 			directionVector = glm::normalize(directionVector);
-			// std::cout << "x: " << directionVector.x << " y: " << directionVector.y << " z: " << directionVector.z << std::endl;
 
+			RayTriangleIntersection intersection = getClosestIntersection(directionVector);
 			if (inbounds(xs, ys)) {
-				window.setPixelColour(xs, ys, ColourToInt(getClosestIntersection(directionVector)));
+				// pixel colour is the colour of the pixel at (xs,ys) and we can alter it depending if it is in shadow
+				Colour pixelColour(0,0,0);
+				// TextureMap texture(textureList.at(0));
+				// std::array<TexturePoint,3> texturePoints = intersection.intersectedTriangle.texturePoints;
+				// 	// if (inrange(texturePoints[0].x, texturePoints[0].y, 0, 1)) {
+
+				if (intersection.distanceFromCamera < INFINITY) {
+					// if triangle is textured, we need to get the pixel colour from the texture
+					// if (verifyTexturePoints(texturePoints)) {
+						// glm::vec2 e0(texturePoints[1].x - texturePoints[0].x, texturePoints[1].y - texturePoints[0].y);
+						// glm::vec2 e1(texturePoints[2].x - texturePoints[0].x, texturePoints[2].y - texturePoints[0].y);
+						// glm::vec2 texturePixel(texturePoints[0].x, texturePoints[0].y);
+						// texturePixel += (intersection.solution.y * e0 + intersection.solution.z * e1);
+						// texturePixel.x *= texture.width;
+						// texturePixel.y *= texture.height;
+						// uint32_t rgbval = getTexturePixel(TexturePoint(texturePixel.x, texturePixel.y), texture);
+						// uint32_t rgbval = getTexturePixel(TexturePoint(300, 300), texture);
+						// pixelColour = Colour(rgbval);
+						// std::cout << " x: " << texturePixel.x <<  " y: " << texturePixel.y <<  " rgb: " << rgbval << std::endl;
+					// }
+					// else if untextured, set colour to triangle colour
+					 pixelColour = intersection.intersectedTriangle.colour;
+				}
+
+				// if using shadows, we need to dim the brightness of colour of the pixels in shadow
+				if (shadowsOn) {
+					if (intersection.distanceFromCamera < INFINITY) {
+						if (shadowTrace(intersection)) {
+							pixelColour.blue /= 2;
+							pixelColour.red /= 2;
+							pixelColour.green /= 2;
+						}
+					}
+				}
+				window.setPixelColour(xs, ys, ColourToInt(pixelColour));
 			}
-			// point = campos + directionVector * scalar
 		}
 	}
 }
@@ -773,6 +846,9 @@ void draw(DrawingWindow &window) {
 	// if rendering scene as a whole (raytracing)
 	if (renderStyle == 3) {
 		raytraceScene(window);
+	}
+	else if (renderStyle == 4) {
+		raytraceScene(window, true);
 	}
 	// else looping through triangles (rasterising)
 	else {
@@ -910,9 +986,8 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 					face.texturePoints[0] = tp;
 					face.texturePoints[1] = tp;
 					face.texturePoints[2] = tp;
-
 				}	
-
+					
 				triangleList.push_back(face);
 			}
 			else if (lineSegments[0] == "usemtl") {
@@ -1140,6 +1215,9 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		}
 		else if (event.key.keysym.sym == SDLK_3) {
 			renderStyle = 3;
+		}
+		else if (event.key.keysym.sym == SDLK_4) {
+			renderStyle = 4;
 		}
 		else if (event.key.keysym.sym == SDLK_0) {
 			renderStyle = 0;
