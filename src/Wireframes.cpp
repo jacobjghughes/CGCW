@@ -21,10 +21,10 @@
 #define WIDTH 300 //300
 #define HEIGHT 300 //300
 // #define BRICK "../textures/texture.ppm"
-#define MODELS "/home/jakehughes/Desktop/CGCW/models"
-#define BOX "/home/jakehughes/Desktop/CGCW/models/textured-cornell-box.obj"
+#define MODELS "./models"
+#define BOX "./models/textured-cornell-box.obj"
 // #define BOX "/home/jakehughes/Desktop/CG2021/Weekly Workbooks/04 Wireframes and Rasterising/Wireframes/models/boxes.obj"
-#define MATS "/home/jakehughes/Desktop/CGCW/models/textured-cornell-box.mtl"
+#define MATS "./models/textured-cornell-box.mtl"
 #define FOCLEN 6 // default focal length
 #define SCALE 50
 #define DEFPOS glm::vec3(0.0, 0.0, 10.0)
@@ -39,7 +39,7 @@ glm::vec3 campos(0.0, 0.0, 10.0);
 float depthBuffer[WIDTH * HEIGHT];
 std::vector<glm::vec3> lightList;
 std::vector<ModelTriangle> triangleList;
-std::vector<std::string> textureList;
+std::vector<TextureMap> textureList;
 glm::mat3 camrot(DEFROT);
 int renderStyle = 0;
 
@@ -564,13 +564,17 @@ void rasterizeTriangle(CanvasTriangle t, DrawingWindow &window, Colour c) {
 	}
 }
 
+uint32_t getTexturePixel(float x, float y, int textureIndex) {
+	TextureMap map = textureList.at(textureIndex);
+	return map.pixels[(round(y) * map.width) + round(x)];
+}
+
 uint32_t getTexturePixel(TexturePoint p, TextureMap &map) {
 	return map.pixels[(round(p.y) * map.width) + round(p.x)];
 }
 
 void textureTriangle(ModelTriangle t, DrawingWindow &window, int textureIndex = 0) {
-	// std::cout << textureList.at(textureIndex) << std::endl;
-	TextureMap texture(textureList.at(textureIndex));
+	TextureMap texture = textureList.at(textureIndex);
 	// convert texture percentages to texture coordinates from loaded texture 
 	for (int i = 0; i < 3; i++) {
 		t.texturePoints[i].x *= texture.width;
@@ -765,24 +769,23 @@ void raytraceScene(DrawingWindow &window, bool shadowsOn = false) {
 			if (inbounds(xs, ys)) {
 				// pixel colour is the colour of the pixel at (xs,ys) and we can alter it depending if it is in shadow
 				Colour pixelColour(0,0,0);
-				// TextureMap texture(textureList.at(0));
-				// std::array<TexturePoint,3> texturePoints = intersection.intersectedTriangle.texturePoints;
+				TextureMap texture = textureList.at(0);
+				std::array<TexturePoint,3> texturePoints = intersection.intersectedTriangle.texturePoints;
 				// 	// if (inrange(texturePoints[0].x, texturePoints[0].y, 0, 1)) {
 
 				if (intersection.distanceFromCamera < INFINITY) {
 					// if triangle is textured, we need to get the pixel colour from the texture
-					// if (verifyTexturePoints(texturePoints)) {
-						// glm::vec2 e0(texturePoints[1].x - texturePoints[0].x, texturePoints[1].y - texturePoints[0].y);
-						// glm::vec2 e1(texturePoints[2].x - texturePoints[0].x, texturePoints[2].y - texturePoints[0].y);
-						// glm::vec2 texturePixel(texturePoints[0].x, texturePoints[0].y);
-						// texturePixel += (intersection.solution.y * e0 + intersection.solution.z * e1);
-						// texturePixel.x *= texture.width;
-						// texturePixel.y *= texture.height;
-						// uint32_t rgbval = getTexturePixel(TexturePoint(texturePixel.x, texturePixel.y), texture);
-						// uint32_t rgbval = getTexturePixel(TexturePoint(300, 300), texture);
+					if (triangleList[intersection.triangleIndex].textured) {
+						glm::vec2 e0(texturePoints[1].x - texturePoints[0].x, texturePoints[1].y - texturePoints[0].y);
+						glm::vec2 e1(texturePoints[2].x - texturePoints[0].x, texturePoints[2].y - texturePoints[0].y);
+						glm::vec2 texturePixel(texturePoints[0].x, texturePoints[0].y);
+						texturePixel += (intersection.solution.y * e0 + intersection.solution.z * e1);
+						texturePixel.x *= texture.width;
+						texturePixel.y *= texture.height;
+						uint32_t rgbval = getTexturePixel(texturePixel.x, texturePixel.y, 0);
 						// pixelColour = Colour(rgbval);
-						// std::cout << " x: " << texturePixel.x <<  " y: " << texturePixel.y <<  " rgb: " << rgbval << std::endl;
-					// }
+						std::cout << " x: " << texturePixel.x <<  " y: " << texturePixel.y << std::endl;
+					}
 					// else if untextured, set colour to triangle colour
 					 pixelColour = intersection.intersectedTriangle.colour;
 				}
@@ -900,7 +903,7 @@ void readMaterialFile(std::unordered_map<std::string, Colour> &materials, std::s
 	std::string readLine;
 	std::string name;
 	Colour colour;
-	int textureCount = 0;
+	// int textureCount = 0;
 	textureList.clear();
 
 	if (file.is_open()) {
@@ -921,9 +924,9 @@ void readMaterialFile(std::unordered_map<std::string, Colour> &materials, std::s
 				// add the texture to the textureList
 				std::string texturePath = MODELS;
 				texturePath.append("/" + lineSegments[1]);
-				textureList.emplace_back(texturePath);
+				textureList.emplace_back(TextureMap(texturePath));
 				
-				textureCount++;
+				// textureCount++;
 			}
 		}
 	}
@@ -936,6 +939,8 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 	std::vector<TexturePoint> texturePointList;
 	std::unordered_map<std::string, Colour> materials;
 	Colour currentMaterial;
+	bool currentMaterialIsTexture;
+	int currentTextureIndex;
 
 	triangleList.clear();
 
@@ -963,6 +968,7 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 				x = std::stof(lineSegments[1]);
 				y = std::stof(lineSegments[2]);
 				texturePointList.push_back(TexturePoint(x,y));
+				currentMaterialIsTexture = true;
 			}
 
 			else if (lineSegments[0] == "f") {
@@ -980,17 +986,17 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 					face.texturePoints[0] = texturePointList[ta];
 					face.texturePoints[1] = texturePointList[tb];
 					face.texturePoints[2] = texturePointList[tc];
+					face.textured = true;
+					// 
+					face.textureIndex = currentTextureIndex;
 				}
-				else {
-					TexturePoint tp(-1,-1);
-					face.texturePoints[0] = tp;
-					face.texturePoints[1] = tp;
-					face.texturePoints[2] = tp;
-				}	
+				else face.textured = false;
 					
 				triangleList.push_back(face);
 			}
 			else if (lineSegments[0] == "usemtl") {
+				if (currentMaterialIsTexture) currentTextureIndex++;
+				currentMaterialIsTexture = false;
 				currentMaterial = materials.at(lineSegments[1]);
 			}
 		}
