@@ -782,12 +782,12 @@ void raytraceScene(DrawingWindow &window, bool shadowsOn = false) {
 						texturePixel += (intersection.solution.y * e0 + intersection.solution.z * e1);
 						texturePixel.x *= texture.width;
 						texturePixel.y *= texture.height;
-						uint32_t rgbval = getTexturePixel(texturePixel.x, texturePixel.y, 0);
-						// pixelColour = Colour(rgbval);
-						std::cout << " x: " << texturePixel.x <<  " y: " << texturePixel.y << std::endl;
+						uint32_t rgbval = getTexturePixel(texturePixel.x, texturePixel.y, intersection.intersectedTriangle.textureIndex);
+						pixelColour = Colour(rgbval);
+						// std::cout << " x: " << texturePixel.x <<  " y: " << texturePixel.y << std::endl;
 					}
 					// else if untextured, set colour to triangle colour
-					 pixelColour = intersection.intersectedTriangle.colour;
+					else pixelColour = intersection.intersectedTriangle.colour;
 				}
 
 				// if using shadows, we need to dim the brightness of colour of the pixels in shadow
@@ -939,8 +939,8 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 	std::vector<TexturePoint> texturePointList;
 	std::unordered_map<std::string, Colour> materials;
 	Colour currentMaterial;
-	bool currentMaterialIsTexture;
-	int currentTextureIndex;
+	bool currentMaterialIsTexture = false;
+	int currentTextureIndex = 0;
 
 	triangleList.clear();
 
@@ -987,7 +987,6 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 					face.texturePoints[1] = texturePointList[tb];
 					face.texturePoints[2] = texturePointList[tc];
 					face.textured = true;
-					// 
 					face.textureIndex = currentTextureIndex;
 				}
 				else face.textured = false;
