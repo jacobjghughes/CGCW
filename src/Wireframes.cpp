@@ -11,22 +11,24 @@
 #include <TextureMap.h>
 #include <TexturePoint.h>
 #include <ModelTriangle.h>
+#include <RayTriangleIntersection.h>
 #include <fstream>
 #include <string>
 #include <iostream>
 #include <unordered_map>
 #include <cmath>
 
-#define WIDTH 300
-#define HEIGHT 300
+#define WIDTH 300 //300
+#define HEIGHT 300 //300
 // #define BRICK "../textures/texture.ppm"
-#define MODELS "/home/jakehughes/Desktop/CGCW/models"
-#define BOX "/home/jakehughes/Desktop/CGCW/models/textured-cornell-box.obj"
+#define MODELS "./models"
+#define BOX "./models/textured-cornell-box.obj"
 // #define BOX "/home/jakehughes/Desktop/CG2021/Weekly Workbooks/04 Wireframes and Rasterising/Wireframes/models/boxes.obj"
-#define MATS "/home/jakehughes/Desktop/CGCW/models/textured-cornell-box.mtl"
+#define MATS "./models/textured-cornell-box.mtl"
 #define FOCLEN 6 // default focal length
 #define SCALE 50
 #define DEFPOS glm::vec3(0.0, 0.0, 10.0)
+// #define DEFPOS glm::vec3(0.0, 0.0, 10.0)
 #define DEFROT glm::mat3(1,0,0,0,1,0,0,0,1)
 #define ORIGIN CanvasPoint(0,0,0)
 
@@ -35,8 +37,9 @@
 bool OrbiterToggle;
 glm::vec3 campos(0.0, 0.0, 10.0); 
 float depthBuffer[WIDTH * HEIGHT];
+std::vector<glm::vec3> lightList;
 std::vector<ModelTriangle> triangleList;
-std::vector<std::string> textureList;
+std::vector<TextureMap> textureList;
 glm::mat3 camrot(DEFROT);
 int renderStyle = 0;
 
@@ -74,6 +77,34 @@ bool inbounds(CanvasPoint p) {
 	else if (p.y <= 0 || p.y >= HEIGHT) return false;
 	else if (p.depth < 0) return false; 
 	else return true;
+}
+
+bool inbounds(int x, int y) {
+	if (x <= 0 || x >= WIDTH) return false;
+	else if (y <= 0 || y >= HEIGHT) return false;
+	else return true;
+}
+
+bool inrange(int x, int y, float min, float max) {
+	if (x < min || x > max) return false;
+	else if (y < min || y > max) return false;
+	else return true;
+}
+
+bool verifyTexturePoints(std::array<TexturePoint, 3> points) {
+	for (int i = 0; i < 3; i++) {
+		if ((points[i].x > 0 || points[i].y > 0)) {
+			std::cout << "index: " << i << " tpx: " << points[i].x << " tpy: " << points[i].y << std::endl;
+			return true;
+		}
+	}
+	return false;
+}
+
+float clamp(float x, float min, float max) {
+	if (x <= min) return min;
+	else if (x >= max) return max;
+	else return x;
 }
 
 std::vector<glm::lowp_vec3> interpolateLowPVec(glm::lowp_vec3 from, glm::lowp_vec3 to, int numberOfValues) {
@@ -538,13 +569,17 @@ void rasterizeTriangle(CanvasTriangle t, DrawingWindow &window, Colour c) {
 	}
 }
 
+uint32_t getTexturePixel(float x, float y, int textureIndex) {
+	TextureMap map = textureList.at(textureIndex);
+	return map.pixels[(round(y) * map.width) + round(x)];
+}
+
 uint32_t getTexturePixel(TexturePoint p, TextureMap &map) {
 	return map.pixels[(round(p.y) * map.width) + round(p.x)];
 }
 
 void textureTriangle(ModelTriangle t, DrawingWindow &window, int textureIndex = 0) {
-	// std::cout << textureList.at(textureIndex) << std::endl;
-	TextureMap texture(textureList.at(textureIndex));
+	TextureMap texture = textureList.at(textureIndex);
 	// convert texture percentages to texture coordinates from loaded texture 
 	for (int i = 0; i < 3; i++) {
 		t.texturePoints[i].x *= texture.width;
@@ -586,11 +621,11 @@ void textureTriangle(ModelTriangle t, DrawingWindow &window, int textureIndex = 
 		// intercept.texturePoint = findTexturePointIntercept(t);
 
 		topT = ModelTriangle(cpToVec(intercept), t.vertices[0], t.vertices[1], t.colour);
-		topT.texturePoints = {intercept.texturePoint, t.texturePoints[0], t.texturePoints[1]};
+		topT.texturePoints = {{intercept.texturePoint, t.texturePoints[0], t.texturePoints[1]}};
 		topT = sortTopTriangle(topT);
 
 		botT = ModelTriangle(cpToVec(intercept), t.vertices[1], t.vertices[2], t.colour);
-		botT.texturePoints = {intercept.texturePoint, t.texturePoints[1], t.texturePoints[2]};
+		botT.texturePoints = {{intercept.texturePoint, t.texturePoints[1], t.texturePoints[2]}};
 		botT = sortBottomTriangle(botT);
 	}
 
@@ -679,6 +714,142 @@ void textureTriangle(ModelTriangle t, DrawingWindow &window, int textureIndex = 
 	drawStrokedTriangle(t,window,Colour(255,255,255));
 }
 
+RayTriangleIntersection getClosestIntersection(glm::vec3 directionVector, glm::vec3 startpos = campos, int ignoreIndex = -1) {
+	RayTriangleIntersection intersection;
+	intersection.distanceFromCamera = INFINITY;
+
+	for (int i = 0; i < triangleList.size(); i++) {
+		
+		if (i == ignoreIndex) continue;
+
+		glm::vec3 e0 = triangleList[i].vertices[1] - triangleList[i].vertices[0];
+		glm::vec3 e1 = triangleList[i].vertices[2] - triangleList[i].vertices[0];
+		glm::vec3 SPVector = startpos - triangleList[i].vertices[0];
+		glm::mat3 DEMatrix(-directionVector, e0, e1);
+		glm::vec3 possibleSolution = glm::inverse(DEMatrix) * SPVector;
+
+		if (possibleSolution.x < intersection.distanceFromCamera && possibleSolution.x > 0 
+			&& possibleSolution.y <= 1 && possibleSolution.y >= 0 
+			&& possibleSolution.z <= 1 && possibleSolution.z >= 0 
+			&& (possibleSolution.y + possibleSolution.z <= 1)) {
+
+				intersection.distanceFromCamera = possibleSolution.x;
+				intersection.intersectedTriangle = triangleList[i];
+				intersection.intersectionPoint = glm::vec3(triangleList[i].vertices[0] + possibleSolution.y * e0 + possibleSolution.z * e1);
+				intersection.triangleIndex = i;
+				intersection.solution = possibleSolution;
+		}
+	}
+
+
+	// std::cout << closestPoint.x << std::endl;
+	return intersection;
+}
+
+float incidenceLighting(RayTriangleIntersection projectedPoint) {
+	// this is the light we will use for incidence lighting
+	glm::vec3 light(0, 0.4, 0);
+	// cast ray from point to selected light
+	glm::vec3 rayToLight = glm::normalize(light - projectedPoint.intersectionPoint);
+	// raytolight and pointnormal are normalized so dot product returns cos(angle)
+	float angle = glm::dot(rayToLight, projectedPoint.intersectedTriangle.normal);
+	// clamp min set to above 0 so that surfaces not incident (obtuse angle - facing away) from the light aren't black
+	return clamp(angle, 0.5, 1);
+}
+
+float proximityLighting(RayTriangleIntersection projectedPoint) {
+	// this is the light we will use for proximity lighting
+	glm::vec3 light(0, 0.4, 0);
+	// intensity of the light - can be greater than one but output is capped at 1 
+	float intensity = 2.5;
+
+	// cast ray from point to selected light
+	glm::vec3 rayToLight = light - projectedPoint.intersectionPoint;
+	// radius of light (distance from light to point)
+	float radius = glm::length(rayToLight);
+
+	float brightness = intensity / (4 * M_PI * radius * radius);
+	// clamp min set to 0 so that VERY far away spots can be nearly black
+	return clamp(brightness, 0, 1);
+	return brightness;
+}
+
+bool shadowTrace(RayTriangleIntersection projectedPoint) {
+	glm::vec3 light(0, 0.3, 0);
+	// cast shadow ray from point to selected light
+	glm::vec3 shadowRay = light - projectedPoint.intersectionPoint;
+	float distanceToLight = glm::length(shadowRay);
+	shadowRay = glm::normalize(shadowRay);
+	
+	RayTriangleIntersection shadowIntersection = getClosestIntersection(shadowRay, projectedPoint.intersectionPoint, projectedPoint.triangleIndex);
+	return (shadowIntersection.distanceFromCamera < distanceToLight);
+}
+
+void raytraceScene(DrawingWindow &window, bool shadowsOn = false, bool texturesOn = false, bool useProximity = false, bool useIncidence = false) {
+	for (int ys = 0; ys < HEIGHT; ys++) {
+		for (int xs = 0; xs < WIDTH; xs++) {
+			// get vector from camera to point on plane
+			// point on plane defined
+			glm::vec3 planePoint(xs -float(WIDTH/2), - ys + HEIGHT/2, -FOCLEN);
+			planePoint.x /= (SCALE);
+			planePoint.y /= (SCALE);
+			// vector from camera position to point
+			glm::vec3 directionVector = planePoint - campos;
+			directionVector = camrot * directionVector;
+			directionVector = glm::normalize(directionVector);
+
+			RayTriangleIntersection intersection = getClosestIntersection(directionVector);
+			if (inbounds(xs, ys)) {
+				// pixel colour is the colour of the pixel at (xs,ys) and we can alter it depending if it is in shadow
+				Colour pixelColour(0,0,0);
+				// 	// if (inrange(texturePoints[0].x, texturePoints[0].y, 0, 1)) {
+
+				if (intersection.distanceFromCamera < INFINITY) {
+					// if triangle is textured, we need to get the pixel colour from the texture
+					if (triangleList[intersection.triangleIndex].textured && texturesOn) {
+						// pointer to texturemap in global memory instead of making a new texture every time
+						TextureMap *texture = &textureList.at(0);
+						std::array<TexturePoint,3> *texturePoints = &intersection.intersectedTriangle.texturePoints;
+
+						glm::vec2 e0((*texturePoints)[1].x - (*texturePoints)[0].x, (*texturePoints)[1].y - (*texturePoints)[0].y);
+						glm::vec2 e1((*texturePoints)[2].x - (*texturePoints)[0].x, (*texturePoints)[2].y - (*texturePoints)[0].y);
+						glm::vec2 texturePixel((*texturePoints)[0].x, (*texturePoints)[0].y);
+						texturePixel += (intersection.solution.y * e0 + intersection.solution.z * e1);
+						texturePixel.x *= (*texture).width;
+						texturePixel.y *= (*texture).height;
+						uint32_t rgbval = getTexturePixel(texturePixel.x, texturePixel.y, intersection.intersectedTriangle.textureIndex);
+						pixelColour = Colour(rgbval);
+						// std::cout << " x: " << texturePixel.x <<  " y: " << texturePixel.y << std::endl;
+					}
+					// else if untextured, set colour to triangle colour
+					else pixelColour = intersection.intersectedTriangle.colour;
+
+					// if using shadows, we need to dim the brightness of colour of the pixels in shadow by using a brightness coefficient
+					float brightnessCoeff = 1;
+
+					// line-of-sight-shadows
+					if (shadowsOn && shadowTrace(intersection)) {
+						brightnessCoeff *= 0.5;
+					}
+					// proximity lighting
+					if (useProximity) {
+						brightnessCoeff *= proximityLighting(intersection);
+					}
+					// incidence lighting
+					if (useIncidence) {
+						brightnessCoeff *= incidenceLighting(intersection);
+					}
+					clamp(brightnessCoeff,0,1);
+					pixelColour.blue *= brightnessCoeff;
+					pixelColour.red *= brightnessCoeff;
+					pixelColour.green *= brightnessCoeff;
+				}
+				window.setPixelColour(xs, ys, ColourToInt(pixelColour));
+			}
+		}
+	}
+}
+
 CanvasPoint scalePoint(CanvasPoint p, float scaleFactor) {
 	p.x *= scaleFactor;
 	p.y *= scaleFactor;
@@ -719,43 +890,66 @@ void clearScene(DrawingWindow &window) {
 }
 
 void draw(DrawingWindow &window) {
+	// if rendering scene as a whole (raytracing)
+	if (renderStyle == 3) {
+		raytraceScene(window);
+	}
+	// raytracing with los shadows and textures
+	else if (renderStyle == 4) {
+		raytraceScene(window, true, true);
+	}
+	// raytracing with los shadows, no texture, proximity lighting
+	else if (renderStyle == 5) {
+		raytraceScene(window, true, false, true);
+	}
+	// raytracing with no los shadows, no texture, no proximity lighting, incidence lighting
+	else if (renderStyle == 6) {
+		raytraceScene(window, false, false, false, true);
+	}
+	else if (renderStyle == 7) {
+		raytraceScene(window, true, true, true, true);
+	}
+	// else looping through triangles (rasterising)
+	else {
 	// for (int i = 0; i < 12; i++) { // no boxes
 	// for (int i = 12; i < 22; i++) { // red box
 	// for (int i = 22; i < 32; i++) { // blue box
 	// for (int i = 12; i < triangleList.size(); i++) { // both boxes
-	for (int i = 0; i < triangleList.size(); i++) { //whole scene
-		ModelTriangle t = triangleList[i];
-		// CanvasTriangle t;
-		Colour colour(triangleList[i].colour);
+		for (int i = 0; i < triangleList.size(); i++) { //whole scene
+			ModelTriangle t = triangleList[i];
+			// CanvasTriangle t;
+			Colour colour(triangleList[i].colour);
 
-		for (int j = 0; j < 3; j++) {
-			CanvasPoint p = getCanvasIntersectionPoint(triangleList[i].vertices[j]);
-			t.vertices[j].x = p.x;
-			t.vertices[j].y = p.y;
-			t.vertices[j].z = p.depth;
-		}
+			for (int j = 0; j < 3; j++) {
+				CanvasPoint p = getCanvasIntersectionPoint(triangleList[i].vertices[j]);
+				t.vertices[j].x = p.x;
+				t.vertices[j].y = p.y;
+				t.vertices[j].z = p.depth;
+			}
 
-		// switch case for changing render style 
-		// 1 - wireframes
-		// 2 - rasterising 
-		// std::string colourname = colour.name;
-		switch (renderStyle) {
-			case 1:
-				drawStrokedTriangle(t, window, colour);
-				break;
-			
-			case 2: 
-				/// NEED TO IMPLEMENT TEXTURE DETECTION + GET TEXTURES DRAWING PROPERLY
-				if (t.texturePoints[0].x > 0) {
-					textureTriangle(t, window);
-				}
-				else {
-					rasterizeTriangle(modelToCanvas(t), window, colour);
-				}
-				break;
+			// switch case for changing render style 
+			// 1 - wireframes
+			// 2 - rasterising 
+			// 3 - raytracing
+			// std::string colourname = colour.name;
+			switch (renderStyle) {
+				case 1:
+					drawStrokedTriangle(t, window, colour);
+					break;
+				
+				case 2: 
+					/// NEED TO IMPLEMENT TEXTURE DETECTION + GET TEXTURES DRAWING PROPERLY
+					if (t.texturePoints[0].x > 0) {
+						textureTriangle(t, window);
+					}
+					else {
+						rasterizeTriangle(modelToCanvas(t), window, colour);
+					}
+					break;
 
-			default:
-				break;
+				default:
+					break;
+			}
 		}
 	}
 }
@@ -765,7 +959,7 @@ void readMaterialFile(std::unordered_map<std::string, Colour> &materials, std::s
 	std::string readLine;
 	std::string name;
 	Colour colour;
-	int textureCount = 0;
+	// int textureCount = 0;
 	textureList.clear();
 
 	if (file.is_open()) {
@@ -786,9 +980,9 @@ void readMaterialFile(std::unordered_map<std::string, Colour> &materials, std::s
 				// add the texture to the textureList
 				std::string texturePath = MODELS;
 				texturePath.append("/" + lineSegments[1]);
-				textureList.emplace_back(texturePath);
+				textureList.emplace_back(TextureMap(texturePath));
 				
-				textureCount++;
+				// textureCount++;
 			}
 		}
 	}
@@ -801,6 +995,8 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 	std::vector<TexturePoint> texturePointList;
 	std::unordered_map<std::string, Colour> materials;
 	Colour currentMaterial;
+	bool currentMaterialIsTexture = false;
+	int currentTextureIndex = 0;
 
 	triangleList.clear();
 
@@ -828,6 +1024,7 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 				x = std::stof(lineSegments[1]);
 				y = std::stof(lineSegments[2]);
 				texturePointList.push_back(TexturePoint(x,y));
+				currentMaterialIsTexture = true;
 			}
 
 			else if (lineSegments[0] == "f") {
@@ -845,18 +1042,30 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 					face.texturePoints[0] = texturePointList[ta];
 					face.texturePoints[1] = texturePointList[tb];
 					face.texturePoints[2] = texturePointList[tc];
+					face.textured = true;
+					face.textureIndex = currentTextureIndex;
 				}
+
+				else face.textured = false;
+
+				// calculate normal of triangle
+				// edge AB
+				glm::vec3 e0 = vertexList[b] - vertexList[a];
+				// edge AC
+				glm::vec3 e1 = vertexList[c] - vertexList[a];
+				// if vertices are wound clockwise then 
+				if (a < b) {
+					face.normal = glm::normalize(glm::cross(e0, e1));
+				}
+				// else vertices are wound anticlockwise 
 				else {
-					TexturePoint tp(-1,-1);
-					face.texturePoints[0] = tp;
-					face.texturePoints[1] = tp;
-					face.texturePoints[2] = tp;
-
-				}	
-
+					face.normal = glm::normalize(glm::cross(e1, e0));
+				}
 				triangleList.push_back(face);
 			}
 			else if (lineSegments[0] == "usemtl") {
+				if (currentMaterialIsTexture) currentTextureIndex++;
+				currentMaterialIsTexture = false;
 				currentMaterial = materials.at(lineSegments[1]);
 			}
 		}
@@ -931,58 +1140,58 @@ void rotateScene(int dir = 0, float angle = M_PI/16) {
 	lookAt(ORIGIN);
 }
 
-void rotateCamera(int dir = 0, float angle = M_PI/16) {
-	glm::mat3 matrix;
-	switch (dir) {
-	case 1:
-		// rotate left (about y) key: J
-		matrix = glm::mat3(
-			cos(angle), 0, -sin(angle),
-			         0, 1, 0,
-			sin(angle), 0, cos(angle)
-		);
-		// campos = matrix * campos;
-		camrot = matrix * camrot;
-		break;
+// void rotateCamera(int dir = 0, float angle = M_PI/16) {
+// 	glm::mat3 matrix;
+// 	switch (dir) {
+// 	case 1:
+// 		// rotate left (about y) key: J
+// 		matrix = glm::mat3(
+// 			cos(angle), 0, -sin(angle),
+// 			         0, 1, 0,
+// 			sin(angle), 0, cos(angle)
+// 		);
+// 		// campos = matrix * campos;
+// 		camrot = matrix * camrot;
+// 		break;
 		
 	
-	case 2:
-		// rotate right (about y) key: L
-		matrix = glm::mat3(
-			cos(-angle), 0, -sin(-angle),
-			          0, 1, 0,
-			sin(-angle), 0, cos(-angle)
-		);
-		// campos = matrix * campos;
-		camrot = matrix * camrot;
-		break;
+// 	case 2:
+// 		// rotate right (about y) key: L
+// 		matrix = glm::mat3(
+// 			cos(-angle), 0, -sin(-angle),
+// 			          0, 1, 0,
+// 			sin(-angle), 0, cos(-angle)
+// 		);
+// 		// campos = matrix * campos;
+// 		camrot = matrix * camrot;
+// 		break;
 	
-	case 3:
-		// rotate up (about x) key I
-		matrix = glm::mat3(
-			1,           0, 0,
-			0,  cos(angle), sin(angle),
-			0, -sin(angle), cos(angle)
-		);
-		// campos = matrix * campos;
-		camrot = matrix * camrot;
-		break;
+// 	case 3:
+// 		// rotate up (about x) key I
+// 		matrix = glm::mat3(
+// 			1,           0, 0,
+// 			0,  cos(angle), sin(angle),
+// 			0, -sin(angle), cos(angle)
+// 		);
+// 		// campos = matrix * campos;
+// 		camrot = matrix * camrot;
+// 		break;
 	
-	case 4:
-		// rotate down (about x) key K
-		matrix = glm::mat3(
-			1,            0, 0,
-			0,  cos(-angle), sin(-angle),
-			0, -sin(-angle), cos(-angle)
-		);		
-		// campos = matrix * campos;
-		camrot = matrix * camrot;
-		break;
+// 	case 4:
+// 		// rotate down (about x) key K
+// 		matrix = glm::mat3(
+// 			1,            0, 0,
+// 			0,  cos(-angle), sin(-angle),
+// 			0, -sin(-angle), cos(-angle)
+// 		);		
+// 		// campos = matrix * campos;
+// 		camrot = matrix * camrot;
+// 		break;
 	
-	default:
-		break;
-	}
-}
+// 	default:
+// 		break;
+// 	}
+// }
 
 void orbitCamera() {
 	rotateScene(1, 0.01);
@@ -1081,6 +1290,24 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		}
 		else if (event.key.keysym.sym == SDLK_3) {
 			renderStyle = 3;
+		}
+		else if (event.key.keysym.sym == SDLK_4) {
+			renderStyle = 4;
+		}
+		else if (event.key.keysym.sym == SDLK_5) {
+			renderStyle = 5;
+		}
+		else if (event.key.keysym.sym == SDLK_6) {
+			renderStyle = 6;
+		}
+		else if (event.key.keysym.sym == SDLK_7) {
+			renderStyle = 7;
+		}
+		else if (event.key.keysym.sym == SDLK_8) {
+			renderStyle = 8;
+		}
+		else if (event.key.keysym.sym == SDLK_9) {
+			renderStyle = 9;
 		}
 		else if (event.key.keysym.sym == SDLK_0) {
 			renderStyle = 0;
