@@ -101,6 +101,11 @@ bool verifyTexturePoints(std::array<TexturePoint, 3> points) {
 	return false;
 }
 
+float clamp(float x, float min, float max) {
+	if (x <= min) return min;
+	else if (x >= max) return max;
+	else return x;
+}
 
 std::vector<glm::lowp_vec3> interpolateLowPVec(glm::lowp_vec3 from, glm::lowp_vec3 to, int numberOfValues) {
 	std::vector<glm::lowp_vec3> interpolatedList;
@@ -616,11 +621,11 @@ void textureTriangle(ModelTriangle t, DrawingWindow &window, int textureIndex = 
 		// intercept.texturePoint = findTexturePointIntercept(t);
 
 		topT = ModelTriangle(cpToVec(intercept), t.vertices[0], t.vertices[1], t.colour);
-		topT.texturePoints = {intercept.texturePoint, t.texturePoints[0], t.texturePoints[1]};
+		topT.texturePoints = {{intercept.texturePoint, t.texturePoints[0], t.texturePoints[1]}};
 		topT = sortTopTriangle(topT);
 
 		botT = ModelTriangle(cpToVec(intercept), t.vertices[1], t.vertices[2], t.colour);
-		botT.texturePoints = {intercept.texturePoint, t.texturePoints[1], t.texturePoints[2]};
+		botT.texturePoints = {{intercept.texturePoint, t.texturePoints[1], t.texturePoints[2]}};
 		botT = sortBottomTriangle(botT);
 	}
 
@@ -741,6 +746,34 @@ RayTriangleIntersection getClosestIntersection(glm::vec3 directionVector, glm::v
 	return intersection;
 }
 
+float incidenceLighting(RayTriangleIntersection projectedPoint) {
+	// this is the light we will use for incidence lighting
+	glm::vec3 light(0, 0.4, 0);
+	// cast ray from point to selected light
+	glm::vec3 rayToLight = glm::normalize(light - projectedPoint.intersectionPoint);
+	// raytolight and pointnormal are normalized so dot product returns cos(angle)
+	float angle = glm::dot(rayToLight, projectedPoint.intersectedTriangle.normal);
+	// clamp min set to above 0 so that surfaces not incident (obtuse angle - facing away) from the light aren't black
+	return clamp(angle, 0.5, 1);
+}
+
+float proximityLighting(RayTriangleIntersection projectedPoint) {
+	// this is the light we will use for proximity lighting
+	glm::vec3 light(0, 0.4, 0);
+	// intensity of the light - can be greater than one but output is capped at 1 
+	float intensity = 2.5;
+
+	// cast ray from point to selected light
+	glm::vec3 rayToLight = light - projectedPoint.intersectionPoint;
+	// radius of light (distance from light to point)
+	float radius = glm::length(rayToLight);
+
+	float brightness = intensity / (4 * M_PI * radius * radius);
+	// clamp min set to 0 so that VERY far away spots can be nearly black
+	return clamp(brightness, 0, 1);
+	return brightness;
+}
+
 bool shadowTrace(RayTriangleIntersection projectedPoint) {
 	glm::vec3 light(0, 0.3, 0);
 	// cast shadow ray from point to selected light
@@ -752,7 +785,7 @@ bool shadowTrace(RayTriangleIntersection projectedPoint) {
 	return (shadowIntersection.distanceFromCamera < distanceToLight);
 }
 
-void raytraceScene(DrawingWindow &window, bool shadowsOn = false) {
+void raytraceScene(DrawingWindow &window, bool shadowsOn = false, bool texturesOn = false, bool useProximity = false, bool useIncidence = false) {
 	for (int ys = 0; ys < HEIGHT; ys++) {
 		for (int xs = 0; xs < WIDTH; xs++) {
 			// get vector from camera to point on plane
@@ -769,36 +802,47 @@ void raytraceScene(DrawingWindow &window, bool shadowsOn = false) {
 			if (inbounds(xs, ys)) {
 				// pixel colour is the colour of the pixel at (xs,ys) and we can alter it depending if it is in shadow
 				Colour pixelColour(0,0,0);
-				TextureMap texture = textureList.at(0);
-				std::array<TexturePoint,3> texturePoints = intersection.intersectedTriangle.texturePoints;
 				// 	// if (inrange(texturePoints[0].x, texturePoints[0].y, 0, 1)) {
 
 				if (intersection.distanceFromCamera < INFINITY) {
 					// if triangle is textured, we need to get the pixel colour from the texture
-					if (triangleList[intersection.triangleIndex].textured) {
-						glm::vec2 e0(texturePoints[1].x - texturePoints[0].x, texturePoints[1].y - texturePoints[0].y);
-						glm::vec2 e1(texturePoints[2].x - texturePoints[0].x, texturePoints[2].y - texturePoints[0].y);
-						glm::vec2 texturePixel(texturePoints[0].x, texturePoints[0].y);
+					if (triangleList[intersection.triangleIndex].textured && texturesOn) {
+						// pointer to texturemap in global memory instead of making a new texture every time
+						TextureMap *texture = &textureList.at(0);
+						std::array<TexturePoint,3> *texturePoints = &intersection.intersectedTriangle.texturePoints;
+
+						glm::vec2 e0((*texturePoints)[1].x - (*texturePoints)[0].x, (*texturePoints)[1].y - (*texturePoints)[0].y);
+						glm::vec2 e1((*texturePoints)[2].x - (*texturePoints)[0].x, (*texturePoints)[2].y - (*texturePoints)[0].y);
+						glm::vec2 texturePixel((*texturePoints)[0].x, (*texturePoints)[0].y);
 						texturePixel += (intersection.solution.y * e0 + intersection.solution.z * e1);
-						texturePixel.x *= texture.width;
-						texturePixel.y *= texture.height;
+						texturePixel.x *= (*texture).width;
+						texturePixel.y *= (*texture).height;
 						uint32_t rgbval = getTexturePixel(texturePixel.x, texturePixel.y, intersection.intersectedTriangle.textureIndex);
 						pixelColour = Colour(rgbval);
 						// std::cout << " x: " << texturePixel.x <<  " y: " << texturePixel.y << std::endl;
 					}
 					// else if untextured, set colour to triangle colour
 					else pixelColour = intersection.intersectedTriangle.colour;
-				}
 
-				// if using shadows, we need to dim the brightness of colour of the pixels in shadow
-				if (shadowsOn) {
-					if (intersection.distanceFromCamera < INFINITY) {
-						if (shadowTrace(intersection)) {
-							pixelColour.blue /= 2;
-							pixelColour.red /= 2;
-							pixelColour.green /= 2;
-						}
+					// if using shadows, we need to dim the brightness of colour of the pixels in shadow by using a brightness coefficient
+					float brightnessCoeff = 1;
+
+					// line-of-sight-shadows
+					if (shadowsOn && shadowTrace(intersection)) {
+						brightnessCoeff *= 0.5;
 					}
+					// proximity lighting
+					if (useProximity) {
+						brightnessCoeff *= proximityLighting(intersection);
+					}
+					// incidence lighting
+					if (useIncidence) {
+						brightnessCoeff *= incidenceLighting(intersection);
+					}
+					clamp(brightnessCoeff,0,1);
+					pixelColour.blue *= brightnessCoeff;
+					pixelColour.red *= brightnessCoeff;
+					pixelColour.green *= brightnessCoeff;
 				}
 				window.setPixelColour(xs, ys, ColourToInt(pixelColour));
 			}
@@ -850,8 +894,20 @@ void draw(DrawingWindow &window) {
 	if (renderStyle == 3) {
 		raytraceScene(window);
 	}
+	// raytracing with los shadows and textures
 	else if (renderStyle == 4) {
-		raytraceScene(window, true);
+		raytraceScene(window, true, true);
+	}
+	// raytracing with los shadows, no texture, proximity lighting
+	else if (renderStyle == 5) {
+		raytraceScene(window, true, false, true);
+	}
+	// raytracing with no los shadows, no texture, no proximity lighting, incidence lighting
+	else if (renderStyle == 6) {
+		raytraceScene(window, false, false, false, true);
+	}
+	else if (renderStyle == 7) {
+		raytraceScene(window, true, true, true, true);
 	}
 	// else looping through triangles (rasterising)
 	else {
@@ -989,8 +1045,22 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 					face.textured = true;
 					face.textureIndex = currentTextureIndex;
 				}
+
 				else face.textured = false;
-					
+
+				// calculate normal of triangle
+				// edge AB
+				glm::vec3 e0 = vertexList[b] - vertexList[a];
+				// edge AC
+				glm::vec3 e1 = vertexList[c] - vertexList[a];
+				// if vertices are wound clockwise then 
+				if (a < b) {
+					face.normal = glm::normalize(glm::cross(e0, e1));
+				}
+				// else vertices are wound anticlockwise 
+				else {
+					face.normal = glm::normalize(glm::cross(e1, e0));
+				}
 				triangleList.push_back(face);
 			}
 			else if (lineSegments[0] == "usemtl") {
@@ -1223,6 +1293,21 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		}
 		else if (event.key.keysym.sym == SDLK_4) {
 			renderStyle = 4;
+		}
+		else if (event.key.keysym.sym == SDLK_5) {
+			renderStyle = 5;
+		}
+		else if (event.key.keysym.sym == SDLK_6) {
+			renderStyle = 6;
+		}
+		else if (event.key.keysym.sym == SDLK_7) {
+			renderStyle = 7;
+		}
+		else if (event.key.keysym.sym == SDLK_8) {
+			renderStyle = 8;
+		}
+		else if (event.key.keysym.sym == SDLK_9) {
+			renderStyle = 9;
 		}
 		else if (event.key.keysym.sym == SDLK_0) {
 			renderStyle = 0;
