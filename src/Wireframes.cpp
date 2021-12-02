@@ -17,6 +17,7 @@
 #include <iostream>
 #include <unordered_map>
 #include <cmath>
+#include <algorithm>
 
 #define WIDTH 300 //300
 #define HEIGHT 300 //300
@@ -746,7 +747,22 @@ RayTriangleIntersection getClosestIntersection(glm::vec3 directionVector, glm::v
 	return intersection;
 }
 
-float incidenceLighting(RayTriangleIntersection projectedPoint) {
+float specularLighting(RayTriangleIntersection &projectedPoint, glm::vec3 view, int reflectiveness = 128) {
+	// this is the light we will use for specular lighting
+	glm::vec3 light(0, 0.4, 0);
+	// cast ray from selected light to point
+	glm::vec3 incidentRay = glm::normalize(projectedPoint.intersectionPoint - light);
+	// reflected ray is derived from following formula (Ri - 2 N (Ri . N))
+	glm::vec3 reflectedRay = incidentRay - 2 * projectedPoint.intersectedTriangle.normal * (glm::dot(incidentRay, projectedPoint.intersectedTriangle.normal));
+	// normalised ray from point to camera (negative of the directionVector)
+	view = -view;
+	float brightness = clamp(glm::dot(view, reflectedRay), 0, 1);
+	// raise brightness value to given power to adjust specular spread
+	brightness = pow(brightness, reflectiveness);
+	return brightness;
+} 
+
+float incidenceLighting(RayTriangleIntersection &projectedPoint) {
 	// this is the light we will use for incidence lighting
 	glm::vec3 light(0, 0.4, 0);
 	// cast ray from point to selected light
@@ -757,11 +773,11 @@ float incidenceLighting(RayTriangleIntersection projectedPoint) {
 	return clamp(angle, 0.5, 1);
 }
 
-float proximityLighting(RayTriangleIntersection projectedPoint) {
+float proximityLighting(RayTriangleIntersection &projectedPoint) {
 	// this is the light we will use for proximity lighting
 	glm::vec3 light(0, 0.4, 0);
 	// intensity of the light - can be greater than one but output is capped at 1 
-	float intensity = 2.5;
+	float intensity = 4;
 
 	// cast ray from point to selected light
 	glm::vec3 rayToLight = light - projectedPoint.intersectionPoint;
@@ -774,18 +790,19 @@ float proximityLighting(RayTriangleIntersection projectedPoint) {
 	return brightness;
 }
 
-bool shadowTrace(RayTriangleIntersection projectedPoint) {
+bool shadowTrace(RayTriangleIntersection &projectedPoint) {
 	glm::vec3 light(0, 0.3, 0);
 	// cast shadow ray from point to selected light
 	glm::vec3 shadowRay = light - projectedPoint.intersectionPoint;
 	float distanceToLight = glm::length(shadowRay);
 	shadowRay = glm::normalize(shadowRay);
 	
-	RayTriangleIntersection shadowIntersection = getClosestIntersection(shadowRay, projectedPoint.intersectionPoint, projectedPoint.triangleIndex);
-	return (shadowIntersection.distanceFromCamera < distanceToLight);
+	// RayTriangleIntersection shadowIntersection = getClosestIntersection(shadowRay, projectedPoint.intersectionPoint, projectedPoint.triangleIndex);
+	// return (shadowIntersection.distanceFromCamera < distanceToLight);
+	return (getClosestIntersection(shadowRay, projectedPoint.intersectionPoint, projectedPoint.triangleIndex).distanceFromCamera < distanceToLight);
 }
 
-void raytraceScene(DrawingWindow &window, bool shadowsOn = false, bool texturesOn = false, bool useProximity = false, bool useIncidence = false) {
+void raytraceScene(DrawingWindow &window, bool shadowsOn = false, bool texturesOn = false, bool useProximity = false, bool useIncidence = false, bool useSpecular = false) {
 	for (int ys = 0; ys < HEIGHT; ys++) {
 		for (int xs = 0; xs < WIDTH; xs++) {
 			// get vector from camera to point on plane
@@ -826,10 +843,13 @@ void raytraceScene(DrawingWindow &window, bool shadowsOn = false, bool texturesO
 
 					// if using shadows, we need to dim the brightness of colour of the pixels in shadow by using a brightness coefficient
 					float brightnessCoeff = 1;
+					float specularCoeff = 0;
+					// min value of lighting 
+					float ambientLight = 0.2;
 
 					// line-of-sight-shadows
 					if (shadowsOn && shadowTrace(intersection)) {
-						brightnessCoeff *= 0.5;
+						brightnessCoeff = ambientLight;	
 					}
 					// proximity lighting
 					if (useProximity) {
@@ -839,7 +859,12 @@ void raytraceScene(DrawingWindow &window, bool shadowsOn = false, bool texturesO
 					if (useIncidence) {
 						brightnessCoeff *= incidenceLighting(intersection);
 					}
+					if (useSpecular) {
+						specularCoeff = specularLighting(intersection, directionVector, 128);
+					}
 					clamp(brightnessCoeff,0,1);
+					brightnessCoeff = std::max({brightnessCoeff, specularCoeff, ambientLight});
+
 					pixelColour.blue *= brightnessCoeff;
 					pixelColour.red *= brightnessCoeff;
 					pixelColour.green *= brightnessCoeff;
@@ -894,9 +919,9 @@ void draw(DrawingWindow &window) {
 	if (renderStyle == 3) {
 		raytraceScene(window);
 	}
-	// raytracing with los shadows and textures
+	// raytracing with all on
 	else if (renderStyle == 4) {
-		raytraceScene(window, true, true);
+		raytraceScene(window, true, true, true, true, true);
 	}
 	// raytracing with los shadows, no texture, proximity lighting
 	else if (renderStyle == 5) {
@@ -904,10 +929,10 @@ void draw(DrawingWindow &window) {
 	}
 	// raytracing with no los shadows, no texture, no proximity lighting, incidence lighting
 	else if (renderStyle == 6) {
-		raytraceScene(window, false, false, false, true);
+		raytraceScene(window, false, false, false, false, true);
 	}
 	else if (renderStyle == 7) {
-		raytraceScene(window, true, true, true, true);
+		raytraceScene(window, true, true, true, true, true);
 	}
 	// else looping through triangles (rasterising)
 	else {
