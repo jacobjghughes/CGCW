@@ -24,6 +24,7 @@
 // #define BRICK "../textures/texture.ppm"
 #define MODELS "./models"
 #define BOX "./models/textured-cornell-box.obj"
+#define BALL "./models/sphere.obj"
 // #define BOX "/home/jakehughes/Desktop/CG2021/Weekly Workbooks/04 Wireframes and Rasterising/Wireframes/models/boxes.obj"
 #define MATS "./models/textured-cornell-box.mtl"
 #define FOCLEN 6 // default focal length
@@ -32,13 +33,14 @@
 // #define DEFPOS glm::vec3(0.0, 0.0, 10.0)
 #define DEFROT glm::mat3(1,0,0,0,1,0,0,0,1)
 #define ORIGIN CanvasPoint(0,0,0)
+#define DEFLIGHT glm::vec3(0, 0.4, 0)
 
 // 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
 
 bool OrbiterToggle;
 glm::vec3 campos(0.0, 0.0, 10.0); 
 float depthBuffer[WIDTH * HEIGHT];
-std::vector<glm::vec3> lightList;
+std::vector<glm::vec3> lightList = {DEFLIGHT};
 std::vector<ModelTriangle> triangleList;
 std::vector<TextureMap> textureList;
 glm::mat3 camrot(DEFROT);
@@ -206,6 +208,23 @@ void drawStrokedTriangle(CanvasTriangle t, DrawingWindow &window, Colour c = Col
 	drawLine(t.v0(), t.v1(), window, c);
 	drawLine(t.v0(), t.v2(), window, c);
 	drawLine(t.v1(), t.v2(), window, c);
+}
+
+CanvasPoint getCanvasIntersectionPoint(glm::vec3 vertexPosition, float focalLength = FOCLEN, float scaleFactor = SCALE) {
+	// transpose vertex position so model vertex is in camera coordinate system
+	vertexPosition -= campos;
+	vertexPosition = vertexPosition * camrot;
+
+	CanvasPoint projectedPoint;
+	projectedPoint.x = -1 * SCALE * (focalLength * vertexPosition.x / vertexPosition.z);
+	projectedPoint.y = SCALE * (focalLength * vertexPosition.y / vertexPosition.z);
+	// projectedPoint = scalePoint(projectedPoint, scaleFactor);
+	// projectedPoint.x = WIDTH - projectedPoint.x;
+	projectedPoint.x += (WIDTH / 2);
+	projectedPoint.y += (HEIGHT / 2);
+	projectedPoint.depth = -1 * focalLength * vertexPosition.z;
+	// std::cout << "depth: " << projectedPoint.depth << std::endl;
+	return projectedPoint;
 }
 
 ModelTriangle sortVerticesVertically(ModelTriangle t) {
@@ -715,6 +734,7 @@ void textureTriangle(ModelTriangle t, DrawingWindow &window, int textureIndex = 
 	drawStrokedTriangle(t,window,Colour(255,255,255));
 }
 
+
 RayTriangleIntersection getClosestIntersection(glm::vec3 directionVector, glm::vec3 startpos = campos, int ignoreIndex = -1) {
 	RayTriangleIntersection intersection;
 	intersection.distanceFromCamera = INFINITY;
@@ -749,7 +769,8 @@ RayTriangleIntersection getClosestIntersection(glm::vec3 directionVector, glm::v
 
 float specularLighting(RayTriangleIntersection &projectedPoint, glm::vec3 view, int reflectiveness = 128) {
 	// this is the light we will use for specular lighting
-	glm::vec3 light(0, 0.4, 0);
+	glm::vec3 light = lightList.at(0);
+	// glm::vec3 light(0, 0.4, 0);
 	// cast ray from selected light to point
 	glm::vec3 incidentRay = glm::normalize(projectedPoint.intersectionPoint - light);
 	// reflected ray is derived from following formula (Ri - 2 N (Ri . N))
@@ -762,9 +783,26 @@ float specularLighting(RayTriangleIntersection &projectedPoint, glm::vec3 view, 
 	return brightness;
 } 
 
+float specularLighting(RayTriangleIntersection &projectedPoint, glm::vec3 view, glm::vec3 &pointNormal, int reflectiveness = 128) {
+	// this is the light we will use for specular lighting
+	glm::vec3 light = lightList.at(0);
+	// cast ray from selected light to point
+	glm::vec3 incidentRay = glm::normalize(projectedPoint.intersectionPoint - light);
+	// reflected ray is derived from following formula (Ri - 2 N (Ri . N))
+	glm::vec3 reflectedRay = incidentRay - 2 * pointNormal * (glm::dot(incidentRay, pointNormal));
+	// normalised ray from point to camera (negative of the directionVector)
+	view = -view;
+	float brightness = glm::dot(view, reflectedRay);
+	brightness = pow(brightness, reflectiveness);
+	// raise brightness value to given power to adjust specular spread
+	return clamp(brightness,0,1);
+} 
+
+
 float incidenceLighting(RayTriangleIntersection &projectedPoint) {
 	// this is the light we will use for incidence lighting
-	glm::vec3 light(0, 0.4, 0);
+	glm::vec3 light = lightList.at(0);
+	// glm::vec3 light(0, 0.4, 0);
 	// cast ray from point to selected light
 	glm::vec3 rayToLight = glm::normalize(light - projectedPoint.intersectionPoint);
 	// raytolight and pointnormal are normalized so dot product returns cos(angle)
@@ -773,11 +811,23 @@ float incidenceLighting(RayTriangleIntersection &projectedPoint) {
 	return clamp(angle, 0.5, 1);
 }
 
-float proximityLighting(RayTriangleIntersection &projectedPoint) {
-	// this is the light we will use for proximity lighting
-	glm::vec3 light(0, 0.4, 0);
+float incidenceLighting(RayTriangleIntersection &projectedPoint, glm::vec3 &pointNormal) {
+	// this is the light we will use for incidence lighting
+	glm::vec3 light = lightList.at(0);
+	// glm::vec3 light(0, 0.4, 0);
+	// cast ray from point to selected light
+	glm::vec3 rayToLight = glm::normalize(light - projectedPoint.intersectionPoint);
+	// raytolight and pointnormal are normalized so dot product returns cos(angle)
+	float angle = glm::dot(rayToLight, pointNormal);
+	// clamp min set to above 0 so that surfaces not incident (obtuse angle - facing away) from the light aren't black
+	return clamp(angle, 0.1, 1);
+}
+
+float proximityLighting(RayTriangleIntersection &projectedPoint, float intensity = 4) {
 	// intensity of the light - can be greater than one but output is capped at 1 
-	float intensity = 4;
+	// this is the light we will use for proximity lighting
+	glm::vec3 light = lightList.at(0);
+	// glm::vec3 light(0, 0.4, 0);
 
 	// cast ray from point to selected light
 	glm::vec3 rayToLight = light - projectedPoint.intersectionPoint;
@@ -791,7 +841,8 @@ float proximityLighting(RayTriangleIntersection &projectedPoint) {
 }
 
 bool shadowTrace(RayTriangleIntersection &projectedPoint) {
-	glm::vec3 light(0, 0.3, 0);
+	glm::vec3 light = lightList.at(0);
+	// glm::vec3 light(0, 0.3, 0);
 	// cast shadow ray from point to selected light
 	glm::vec3 shadowRay = light - projectedPoint.intersectionPoint;
 	float distanceToLight = glm::length(shadowRay);
@@ -800,6 +851,32 @@ bool shadowTrace(RayTriangleIntersection &projectedPoint) {
 	// RayTriangleIntersection shadowIntersection = getClosestIntersection(shadowRay, projectedPoint.intersectionPoint, projectedPoint.triangleIndex);
 	// return (shadowIntersection.distanceFromCamera < distanceToLight);
 	return (getClosestIntersection(shadowRay, projectedPoint.intersectionPoint, projectedPoint.triangleIndex).distanceFromCamera < distanceToLight);
+}
+
+float gouraudShading(RayTriangleIntersection &projectedPoint, glm::vec3 camToPoint) {
+	// use intersection.solution to get barycentric coords of triangle
+	float u, v, w;
+	u = projectedPoint.solution.y;
+	v = projectedPoint.solution.z;
+	w = 1 - (u + v);
+
+
+	glm::vec3 pointNormal;
+	pointNormal += projectedPoint.intersectedTriangle.vertexNormals[0] * w;
+	pointNormal += projectedPoint.intersectedTriangle.vertexNormals[1] * u;
+	pointNormal += projectedPoint.intersectedTriangle.vertexNormals[2] * v;
+
+	float brightness = 1, proximity, incidence, specular, ambient = 0.2;
+	// if (shadowTrace(projectedPoint)) ambient = 0.1;
+	proximity = proximityLighting(projectedPoint, 50);
+	incidence = incidenceLighting(projectedPoint, pointNormal);
+	specular = specularLighting(projectedPoint, camToPoint, pointNormal, 64);
+
+	return clamp(std::max({brightness * incidence * proximity, specular, ambient}), 0, 1);
+	// return clamp(std::max({ambient, specular}), 0, 1);
+	// return incidence;
+	// return specular;
+	// return proximity;
 }
 
 void raytraceScene(DrawingWindow &window, bool shadowsOn = false, bool texturesOn = false, bool useProximity = false, bool useIncidence = false, bool useSpecular = false) {
@@ -823,7 +900,7 @@ void raytraceScene(DrawingWindow &window, bool shadowsOn = false, bool texturesO
 
 				if (intersection.distanceFromCamera < INFINITY) {
 					// if triangle is textured, we need to get the pixel colour from the texture
-					if (triangleList[intersection.triangleIndex].textured && texturesOn) {
+					if (intersection.intersectedTriangle.textured && texturesOn) {
 						// pointer to texturemap in global memory instead of making a new texture every time
 						TextureMap *texture = &textureList.at(0);
 						std::array<TexturePoint,3> *texturePoints = &intersection.intersectedTriangle.texturePoints;
@@ -840,30 +917,38 @@ void raytraceScene(DrawingWindow &window, bool shadowsOn = false, bool texturesO
 					}
 					// else if untextured, set colour to triangle colour
 					else pixelColour = intersection.intersectedTriangle.colour;
-
-					// if using shadows, we need to dim the brightness of colour of the pixels in shadow by using a brightness coefficient
+					
 					float brightnessCoeff = 1;
 					float specularCoeff = 0;
 					// min value of lighting 
 					float ambientLight = 0.2;
 
-					// line-of-sight-shadows
-					if (shadowsOn && shadowTrace(intersection)) {
-						brightnessCoeff = ambientLight;	
+					// if using gouraud shading
+					if (intersection.intersectedTriangle.shaded) {
+						brightnessCoeff = gouraudShading(intersection, directionVector);
 					}
-					// proximity lighting
-					if (useProximity) {
-						brightnessCoeff *= proximityLighting(intersection);
+					// else use standard lighting 
+					// we need to dim the brightness of colour of the pixels in shadow by using a brightness coefficient
+					else {
+						// line-of-sight-shadows
+						if (shadowsOn && shadowTrace(intersection)) {
+							ambientLight *= 0.5;	
+							brightnessCoeff = ambientLight;
+						}
+						// proximity lighting
+						if (useProximity) {
+							brightnessCoeff *= proximityLighting(intersection);
+						}
+						// incidence lighting
+						if (useIncidence) {
+							brightnessCoeff *= incidenceLighting(intersection);
+						}
+						if (useSpecular) {
+							specularCoeff = specularLighting(intersection, directionVector, 128);
+						}
+						clamp(brightnessCoeff,0,1);
+						brightnessCoeff = std::max({brightnessCoeff, specularCoeff, ambientLight});
 					}
-					// incidence lighting
-					if (useIncidence) {
-						brightnessCoeff *= incidenceLighting(intersection);
-					}
-					if (useSpecular) {
-						specularCoeff = specularLighting(intersection, directionVector, 128);
-					}
-					clamp(brightnessCoeff,0,1);
-					brightnessCoeff = std::max({brightnessCoeff, specularCoeff, ambientLight});
 
 					pixelColour.blue *= brightnessCoeff;
 					pixelColour.red *= brightnessCoeff;
@@ -879,23 +964,6 @@ CanvasPoint scalePoint(CanvasPoint p, float scaleFactor) {
 	p.x *= scaleFactor;
 	p.y *= scaleFactor;
 	return p;
-}
-
-CanvasPoint getCanvasIntersectionPoint(glm::vec3 vertexPosition, float focalLength = FOCLEN, float scaleFactor = SCALE) {
-	// transpose vertex position so model vertex is in camera coordinate system
-	vertexPosition -= campos;
-	vertexPosition = vertexPosition * camrot;
-
-	CanvasPoint projectedPoint;
-	projectedPoint.x = -1 * SCALE * (focalLength * vertexPosition.x / vertexPosition.z);
-	projectedPoint.y = SCALE * (focalLength * vertexPosition.y / vertexPosition.z);
-	// projectedPoint = scalePoint(projectedPoint, scaleFactor);
-	// projectedPoint.x = WIDTH - projectedPoint.x;
-	projectedPoint.x += (WIDTH / 2);
-	projectedPoint.y += (HEIGHT / 2);
-	projectedPoint.depth = -1 * focalLength * vertexPosition.z;
-	// std::cout << "depth: " << projectedPoint.depth << std::endl;
-	return projectedPoint;
 }
 
 std::vector<ModelTriangle> scaleModelTriangles(std::vector<ModelTriangle> triangleList, float scaleFactor) {
@@ -1013,29 +1081,27 @@ void readMaterialFile(std::unordered_map<std::string, Colour> &materials, std::s
 	}
 } 
 
-void readOBJFile(std::string filename, DrawingWindow &window) {
+void readOBJFile(std::string filename, DrawingWindow &window, std::unordered_map<std::string, Colour> materials) {
 	std::ifstream file(filename, std::ifstream::in);	
 	std::string readLine;
 	std::vector<glm::vec3> vertexList;
+	std::vector<glm::vec3> vertexNormalList;
 	std::vector<TexturePoint> texturePointList;
-	std::unordered_map<std::string, Colour> materials;
-	Colour currentMaterial;
+	Colour currentMaterial(255,0,0);
 	bool currentMaterialIsTexture = false;
 	int currentTextureIndex = 0;
-
-	triangleList.clear();
 
 	if (file.is_open()) {
 		while(std::getline(file, readLine)) {
 			std::vector<std::string> lineSegments = split(readLine, ' ');
 
-			if (lineSegments[0] == "mtllib") {
-				std::string mtllib = filename;
-				int folderindex = mtllib.find_last_of('/');
-				mtllib.erase(folderindex, mtllib.size());
-				mtllib.append("/" + lineSegments[1]);
-				readMaterialFile(materials, mtllib);
-			}
+			// if (lineSegments[0] == "mtllib") {
+			// 	std::string mtllib = filename;
+			// 	int folderindex = mtllib.find_last_of('/');
+			// 	mtllib.erase(folderindex, mtllib.size());
+			// 	mtllib.append("/" + lineSegments[1]);
+			// 	readMaterialFile(materials, mtllib);
+			// }
 			if (lineSegments[0] == "v") {
 				float x, y, z;
 				x = std::stof(lineSegments[1]);
@@ -1051,6 +1117,14 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 				texturePointList.push_back(TexturePoint(x,y));
 				currentMaterialIsTexture = true;
 			}
+			else if (lineSegments[0] == "vn") {
+				float x, y, z;
+				x = std::stof(lineSegments[1]);
+				y = std::stof(lineSegments[2]);
+				z = std::stof(lineSegments[3]);
+
+				vertexNormalList.push_back(glm::vec3(x,y,z));
+			}
 
 			else if (lineSegments[0] == "f") {
 				int a, b, c, ta, tb, tc;
@@ -1060,6 +1134,7 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 
 				ModelTriangle face(vertexList[a], vertexList[b], vertexList[c], currentMaterial);
 
+				// checking face for texturepoints
 				if (!split(lineSegments[1], '/').at(1).empty()){
 					ta = std::stoi(split(lineSegments[1], '/').at(1)) - 1;
 					tb = std::stoi(split(lineSegments[2], '/').at(1)) - 1;
@@ -1070,9 +1145,18 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 					face.textured = true;
 					face.textureIndex = currentTextureIndex;
 				}
-
 				else face.textured = false;
 
+				// checking face for vertexNormals
+				if (split(lineSegments[1], '/').size() == 3) {
+					for (int i = 0; i < 3; i++) {
+						float vnIndex = stoi(split(lineSegments[i+1], '/').at(2));
+						face.vertexNormals[i] = vertexNormalList[vnIndex -1];
+					}
+					face.shaded = true;
+				}
+				else face.shaded = false;
+				
 				// calculate normal of triangle
 				// edge AB
 				glm::vec3 e0 = vertexList[b] - vertexList[a];
@@ -1098,6 +1182,18 @@ void readOBJFile(std::string filename, DrawingWindow &window) {
 	}
 	else std::cout << "file not open" << std::endl;
 
+	// triangleList.push_back(ModelTriangle(lightList[0]+glm::vec3(0.1,0,0),lightList[0],lightList[0]+glm::vec3(0,-0.1,0),Colour(255,255,255)));
+
+	// triangleList = scaleModelTriangles(triangleList, 2);
+}
+
+void loadObjs(DrawingWindow &window) {
+	std::unordered_map<std::string, Colour> materials;
+	readMaterialFile(materials, MATS);
+
+	triangleList.clear();
+	readOBJFile(BOX, window, materials);
+	// readOBJFile(BALL, window, materials);
 	triangleList = scaleModelTriangles(triangleList, 0.17);
 }
 
@@ -1338,9 +1434,16 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 			renderStyle = 0;
 		}
 
+		else if (event.key.keysym.sym == SDLK_KP_6) lightList[0].x += 0.1;
+		else if (event.key.keysym.sym == SDLK_KP_4) lightList[0].x -= 0.1;
+		else if (event.key.keysym.sym == SDLK_KP_8) lightList[0].y += 0.1;
+		else if (event.key.keysym.sym == SDLK_KP_5) lightList[0].y -= 0.1;
+		else if (event.key.keysym.sym == SDLK_KP_7) lightList[0].z += 0.1;
+		else if (event.key.keysym.sym == SDLK_KP_1) lightList[0].z -= 0.1;
+
 		// else if (event.key.keysym.sym == SDLK_m) readMaterialFile(std::unordered_map<std::string, Colour> materials, MATS);
 		else if (event.key.keysym.sym == SDLK_o) {
-			readOBJFile(BOX, window);
+			loadObjs(window);
 			draw(window);
 		} 
 		// else if (event.key.keysym.sym == SDLK_c) clearScene(window);
@@ -1362,7 +1465,7 @@ int main(int argc, char *argv[]) {
 	SDL_Event event;
 
 	// std::cout << BRICK << BOX << MATS << std::endl;
-	readOBJFile(BOX, window);
+	loadObjs(window);
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
