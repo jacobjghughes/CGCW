@@ -9,9 +9,11 @@
 struct ModelTriangle {
 	std::array<glm::vec3, 3> vertices{};
 	std::array<TexturePoint, 3> texturePoints{};
+	std::array<glm::vec3, 3> vertexNormals{};
 	Colour colour{};
 	glm::vec3 normal{};
 	bool textured{};
+	bool shaded{};
 	int textureIndex{};
 
 	ModelTriangle();
