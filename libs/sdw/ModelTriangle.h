@@ -12,9 +12,10 @@ struct ModelTriangle {
 	std::array<glm::vec3, 3> vertexNormals{};
 	Colour colour{};
 	glm::vec3 normal{};
-	bool textured{};
-	bool shaded{};
+	bool textured{false};
+	bool shaded{false};
 	int textureIndex{};
+	float reflectiveness{0};
 
 	ModelTriangle();
 	ModelTriangle(const glm::vec3 &v0, const glm::vec3 &v1, const glm::vec3 &v2, Colour trigColour);

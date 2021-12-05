@@ -22,6 +22,13 @@ Kd 1.000000 0.000000 1.000000
 newmtl Cyan
 Kd 0.000000 1.000000 1.000000
 
+newmtl Teal
+Kd 0.0 0.8 0.6
+
 newmtl Cobbles
 Kd 1.000000 1.000000 1.000000
-map_Kd texture.ppm
+map_Kd cobbles.ppm
+
+newmtl Leopard
+Kd 1.000000 1.000000 1.000000
+map_Kd leopard.ppm

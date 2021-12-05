@@ -19,27 +19,13 @@
 #include <cmath>
 #include <algorithm>
 
-struct Light {
-	glm::vec3 light;
-	float intensity{};
-
-	Light() {
-		light = glm::vec3(0,0,0);
-		intensity = 1;
-	}
-
-	Light(glm::vec3 vec, float intval = 1) {
-		light = vec;
-		intensity = intval;
-	}
-};
-
 #define WIDTH 300 //300
 #define HEIGHT 300 //300
 // #define BRICK "../textures/texture.ppm"
 #define MODELS "./models"
 #define BOX "./models/textured-cornell-box.obj"
 #define BALL "./models/sphere.obj"
+#define LOGO "./models/logo1.obj"
 // #define BOX "/home/jakehughes/Desktop/CG2021/Weekly Workbooks/04 Wireframes and Rasterising/Wireframes/models/boxes.obj"
 #define MATS "./models/textured-cornell-box.mtl"
 #define FOCLEN 6 // default focal length
@@ -49,13 +35,34 @@ struct Light {
 #define DEFROT glm::mat3(1,0,0,0,1,0,0,0,1)
 #define ORIGIN CanvasPoint(0,0,0)
 // #define DEFLIGHT {glm::vec3(0.4, 0.4, 0)}
-#define DEFINT 1
-#define DEFLIGHT {Light(glm::vec3(0, 0.4, 0), DEFINT), Light(glm::vec3(-0.35, 0.4, 0.2), DEFINT)}
-#define SPECINT 1
-#define SPECPOW 256
+#define DEFINT 0.7
+#define DEFCOL Colour(255,255,255)
+#define DEFCOLINT 0.8
+#define DEFLIGHT {Light(glm::vec3(0, 0.4, 0), DEFINT, Colour(255,0,255), 0.2), Light(glm::vec3(-0.35, -0.5, 0.8), 1, Colour(153, 255, 51), 0.2)}
+#define SPECINT 200
+#define SPECPOW 2048
 #define PROXINT 4
 
 // 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
+
+struct Light {
+	glm::vec3 light;
+	float intensity{DEFINT};
+	Colour colour{DEFCOL};
+	float colourIntensity{DEFCOLINT};
+
+
+	Light() {
+		light = glm::vec3(0,0,0);
+	}
+
+	Light(glm::vec3 vec, float i = DEFINT, Colour c = DEFCOL, float ci = DEFCOLINT) {
+		light = vec;
+		intensity = i;
+		colour = c;
+		colourIntensity = ci;
+	}
+};
 
 bool OrbiterToggle;
 glm::vec3 campos(0.0, 0.0, 10.0); 
@@ -83,6 +90,14 @@ CanvasTriangle modelToCanvas(ModelTriangle mt) {
 		ct.vertices[i].texturePoint = mt.texturePoints[i];
 	}
 	return ct;
+}
+
+Colour scaleColour(float scale, Colour c) {
+	Colour nc;
+	nc.red = c.red * scale;
+	nc.blue = c.blue * scale;
+	nc.green = c.green * scale;
+	return nc;
 }
 
 glm::vec3 cpToLowPVec(CanvasPoint p) {
@@ -781,133 +796,99 @@ RayTriangleIntersection getClosestIntersection(glm::vec3 directionVector, glm::v
 				intersection.solution = possibleSolution;
 		}
 	}
+	// if mirrored, then reflect again
+	if (intersection.intersectedTriangle.reflectiveness == 1) {
+		glm::vec3 reflectedRay = directionVector - 2 * intersection.intersectedTriangle.normal * (glm::dot(directionVector, intersection.intersectedTriangle.normal));
+		intersection = getClosestIntersection(glm::normalize(reflectedRay), intersection.intersectionPoint, intersection.triangleIndex);
+	}
 
 
 	// std::cout << closestPoint.x << std::endl;
 	return intersection;
 }
 
-float specularLighting(RayTriangleIntersection &projectedPoint, glm::vec3 view, int reflectiveness = SPECPOW) {
-	float specVal = 0;
-	for (int lt = 0; lt < lightList.size(); lt++) {
-		// this is the light we will use for specular lighting
-		Light thisLight = lightList.at(lt);
-
-		// cast ray from selected light to point
-		glm::vec3 incidentRay = glm::normalize(projectedPoint.intersectionPoint - thisLight.light);
-		// std::cout << lt << "," <<incidentRay.x << ","<< incidentRay.y<<"," << incidentRay.z << std::endl;
-		// reflected ray is derived from following formula (Ri - 2 N (Ri . N))
-		glm::vec3 reflectedRay = incidentRay - 2 * projectedPoint.intersectedTriangle.normal * (glm::dot(incidentRay, projectedPoint.intersectedTriangle.normal));
-		// normalised ray from point to camera (negative of the directionVector)
-		float brightness = clamp(glm::dot(-view, reflectedRay), 0, 1);
-		// raise brightness value to given power to adjust specular spread
-		brightness = pow(brightness, reflectiveness);
-		brightness *= SPECINT; 
-		brightness *= thisLight.intensity;
-		specVal = std::max(specVal, brightness);
-	}
-	return specVal;
+float specularLighting(RayTriangleIntersection &projectedPoint, glm::vec3 view, Light &thisLight, int reflectiveness = SPECPOW) {
+	// cast ray from selected light to point
+	glm::vec3 incidentRay = glm::normalize(projectedPoint.intersectionPoint - thisLight.light);
+	// reflected ray is derived from following formula (Ri - 2 N (Ri . N))
+	glm::vec3 reflectedRay = incidentRay - 2 * projectedPoint.intersectedTriangle.normal * (glm::dot(incidentRay, projectedPoint.intersectedTriangle.normal));
+	// normalised ray from point to camera (negative of the directionVector)
+	float brightness = clamp(glm::dot(-view, reflectedRay), 0, 1);
+	// raise brightness value to given power to adjust specular spread
+	brightness = pow(brightness, reflectiveness);
+	// brightness *= SPECINT; 
+	brightness *= thisLight.intensity;
+	return brightness;
 } 
 
-float specularLighting(RayTriangleIntersection &projectedPoint, glm::vec3 view, glm::vec3 &pointNormal, int reflectiveness = SPECPOW) {
-	float specVal = 0;
-	for (int l = 0; l < lightList.size(); l++) {
-		// this is the light we will use for specular lighting
-		Light thisLight = lightList.at(l);
-		// cast ray from selected light to point
-		glm::vec3 incidentRay = glm::normalize(projectedPoint.intersectionPoint - thisLight.light);
-		// reflected ray is derived from following formula (Ri - 2 N (Ri . N))
-		glm::vec3 reflectedRay = incidentRay - 2 * pointNormal * (glm::dot(incidentRay, pointNormal));
-		// normalised ray from point to camera (negative of the directionVector)
-		float brightness = glm::dot(-view, reflectedRay);
-		// raise brightness value to given power to adjust specular spread
-		brightness = pow(brightness, reflectiveness);
-		brightness *= SPECINT;
-		brightness *= thisLight.intensity;
-		specVal = std::max(brightness, specVal);
-	}
-	return specVal;
+float specularLighting(RayTriangleIntersection &projectedPoint, glm::vec3 view, glm::vec3 &pointNormal, Light &thisLight, int reflectiveness = SPECPOW) {
+	// cast ray from selected light to point
+	glm::vec3 incidentRay = glm::normalize(projectedPoint.intersectionPoint - thisLight.light);
+	// reflected ray is derived from following formula (Ri - 2 N (Ri . N))
+	glm::vec3 reflectedRay = incidentRay - 2 * pointNormal * (glm::dot(incidentRay, pointNormal));
+	// normalised ray from point to camera (negative of the directionVector)
+	float brightness = clamp(glm::dot(-view, reflectedRay), 0, 1);
+	// raise brightness value to given power to adjust specular spread
+	brightness = pow(brightness, reflectiveness);
+	// brightness *= SPECINT;
+	brightness *= thisLight.intensity;
+	return brightness;
 } 
 
 
-float incidenceLighting(RayTriangleIntersection &projectedPoint) {
-	float incVal = 0;
-	for (int lt = 0; lt < lightList.size(); lt++) {
-		// this is the light we will use for incidence lighting
-		Light thisLight = lightList.at(lt);
-		// cast ray from point to selected light
-		glm::vec3 rayToLight = glm::normalize(thisLight.light - projectedPoint.intersectionPoint);
-		// raytolight and pointnormal are normalized so dot product returns cos(angle)
-		float angle = glm::dot(rayToLight, projectedPoint.intersectedTriangle.normal);
-		// clamp min set to above 0 so that surfaces not incident (obtuse angle - facing away) from the light aren't black
-		angle *= thisLight.intensity;
-		incVal = std::max(angle, incVal);
-	}
-	return clamp(incVal, 0.1, 1);
+float incidenceLighting(RayTriangleIntersection &projectedPoint, Light &thisLight) {
+	// cast ray from point to selected light
+	glm::vec3 rayToLight = glm::normalize(thisLight.light - projectedPoint.intersectionPoint);
+	// raytolight and pointnormal are normalized so dot product returns cos(angle)
+	float angle = glm::dot(rayToLight, projectedPoint.intersectedTriangle.normal);
+	// clamp min set to above 0 so that surfaces not incident (obtuse angle - facing away) from the light aren't black
+	angle *= thisLight.intensity;
+	return clamp(angle, 0.1, 1);
 }
 
-float incidenceLighting(RayTriangleIntersection &projectedPoint, glm::vec3 &pointNormal) {
-	float incVal = 0;
-	for (int lt = 0; lt < lightList.size(); lt++) {
-		// this is the light we will use for incidence lighting
-		Light thisLight = lightList.at(lt);
-		// cast ray from point to selected light
-		glm::vec3 rayToLight = glm::normalize(thisLight.light - projectedPoint.intersectionPoint);
-		// raytolight and pointnormal are normalized so dot product returns cos(angle)
-		float angle = glm::dot(rayToLight, pointNormal);
-		// clamp min set to above 0 so that surfaces not incident (obtuse angle - facing away) from the light aren't black
-		angle *= thisLight.intensity;
-		incVal = std::max(angle, incVal);
-	}
-	return clamp(incVal, 0.1, 1);
+float incidenceLighting(RayTriangleIntersection &projectedPoint, glm::vec3 &pointNormal, Light &thisLight) {
+	// cast ray from point to selected light
+	glm::vec3 rayToLight = glm::normalize(thisLight.light - projectedPoint.intersectionPoint);
+	// raytolight and pointnormal are normalized so dot product returns cos(angle)
+	float angle = glm::dot(rayToLight, pointNormal);
+	// clamp min set to above 0 so that surfaces not incident (obtuse angle - facing away) from the light aren't black
+	angle *= thisLight.intensity;
+	return clamp(angle, 0.1, 1);
 }
 
-float proximityLighting(RayTriangleIntersection &projectedPoint) {
-	float proxVal = 0;
-	for (int lt = 0; lt < lightList.size(); lt++) {
-		// this is the light we will use for proximity lighting
-		Light thisLight = lightList.at(lt);
-		// intensity of the light - can be greater than one but output is capped at 1 
+float proximityLighting(RayTriangleIntersection &projectedPoint, Light &thisLight) {
+	// cast ray from point to selected light
+	glm::vec3 rayToLight = thisLight.light - projectedPoint.intersectionPoint;
+	// radius of light (distance from light to point)
+	float radius = glm::length(rayToLight);
 
-		// cast ray from point to selected light
-		glm::vec3 rayToLight = thisLight.light - projectedPoint.intersectionPoint;
-		// radius of light (distance from light to point)
-		float radius = glm::length(rayToLight);
-
-		float brightness = PROXINT / (4 * M_PI * radius * radius);
-		// clamp min set to 0 so that VERY far away spots can be nearly black
-		brightness *= thisLight.intensity;
-		proxVal = std::max(proxVal, brightness);
-	}
-	return clamp(proxVal, 0, 1);
+	float brightness = PROXINT / (4 * M_PI * radius * radius);
+	// clamp min set to 0 so that VERY far away spots can be nearly black
+	brightness *= thisLight.intensity;
+	return clamp(brightness, 0, 1);
 }
 
-float shadowTrace(RayTriangleIntersection &projectedPoint) {
+float shadowTrace(RayTriangleIntersection &projectedPoint, Light &thisLight) {
 	float shadowVal = 1;
-	float brightestLight = 0;
-	for (int lt = 0; lt < lightList.size(); lt++) {
-		Light thisLight = lightList.at(lt);
-
-		// cast shadow ray from point to selected light
-		glm::vec3 shadowRay = thisLight.light - projectedPoint.intersectionPoint;
-		float distanceToLight = glm::length(shadowRay);
-		shadowRay = glm::normalize(shadowRay);
-		
-		if(getClosestIntersection(shadowRay, projectedPoint.intersectionPoint, projectedPoint.triangleIndex).distanceFromCamera < distanceToLight) {
-			shadowVal *= 1 - 0.5 * thisLight.intensity;
-		}
-		else {
-			if (thisLight.intensity > 0) shadowVal /= 1 - 0.5 * thisLight.intensity;
-		}
-		brightestLight = std::max(thisLight.intensity, brightestLight);
+	// cast shadow ray from point to selected light
+	glm::vec3 shadowRay = thisLight.light - projectedPoint.intersectionPoint;
+	float distanceToLight = glm::length(shadowRay);
+	shadowRay = glm::normalize(shadowRay);
+	
+	if(getClosestIntersection(shadowRay, projectedPoint.intersectionPoint, projectedPoint.triangleIndex).distanceFromCamera < distanceToLight) {
+		shadowVal = 1 - 0.5 * thisLight.intensity;
 	}
-	return clamp(shadowVal * brightestLight,0,1);
+	else {
+		if (thisLight.intensity > 0) shadowVal = 1 / (1 - 0.5 * thisLight.intensity);
+	}
+	
+	return clamp(shadowVal,0,1);
 	// RayTriangleIntersection shadowIntersection = getClosestIntersection(shadowRay, projectedPoint.intersectionPoint, projectedPoint.triangleIndex);
 	// return (shadowIntersection.distanceFromCamera < distanceToLight);
 	// return (getClosestIntersection(shadowRay, projectedPoint.intersectionPoint, projectedPoint.triangleIndex).distanceFromCamera < distanceToLight);
 }
 
-std::tuple<float, float> gouraudShading(RayTriangleIntersection &projectedPoint, glm::vec3 camToPoint, float specularCoeff) {
+float gouraudShading(RayTriangleIntersection &projectedPoint, glm::vec3 camToPoint, float &specularCoeff, Colour &extraColour) {
 	// use intersection.solution to get barycentric coords of triangle
 	float u, v, w;
 	u = projectedPoint.solution.y;
@@ -921,13 +902,36 @@ std::tuple<float, float> gouraudShading(RayTriangleIntersection &projectedPoint,
 	pointNormal += projectedPoint.intersectedTriangle.vertexNormals[2] * v;
 
 	float proximity, incidence, specular, ambient = 0.2;
-	// if (shadowTrace(projectedPoint)) ambient = 0.1;
-	proximity = proximityLighting(projectedPoint);
-	incidence = incidenceLighting(projectedPoint, pointNormal);
-	specular = specularLighting(projectedPoint, camToPoint, pointNormal);
-	specularCoeff += specular * SPECINT;
-	specularCoeff = clamp(specularCoeff, 0, 255);
-	return std::make_tuple(clamp(std::max({incidence + proximity, specular, ambient}), 0, 1), specularCoeff);
+
+	float brightestLight = 0;
+	float brightnessCoeff = 1;
+	float proxVal = 0;
+	float incVal = 0;
+	float specVal = 0;
+
+
+	for (int lt = 0; lt < lightList.size(); lt++) {
+		Light thisLight = lightList.at(lt);
+		brightestLight = std::max(brightestLight, thisLight.intensity);
+
+		proximity = proximityLighting(projectedPoint, thisLight);
+		proxVal = std::max(proxVal, proximity);
+		incidence = incidenceLighting(projectedPoint, pointNormal, thisLight);
+		incVal = std::max(incVal, incidence);
+		specular = specularLighting(projectedPoint, camToPoint, pointNormal, thisLight, SPECPOW);
+		specVal = std::max(specVal, specular);
+		specularCoeff = clamp(specVal * SPECINT, 0, 255);
+
+		float thisMax = std::max({ambient, proximity * incidence, specular});
+		float scale = thisLight.colourIntensity * thisMax * thisLight.intensity;
+		extraColour.red += thisLight.colour.red * scale;
+		extraColour.green += thisLight.colour.green * scale;
+		extraColour.blue += thisLight.colour.blue * scale;
+
+	}
+
+	brightnessCoeff *= brightestLight;
+	return clamp(std::max({brightnessCoeff * incVal * proxVal, brightnessCoeff * specVal, brightnessCoeff * ambient}), 0, 1);
 	// return clamp(std::max({ambient, specular}), 0, 1);
 	// return incidence;
 	// return specular;
@@ -957,7 +961,7 @@ void raytraceScene(DrawingWindow &window, bool shadowsOn = false, bool texturesO
 					// if triangle is textured, we need to get the pixel colour from the texture
 					if (intersection.intersectedTriangle.textured && texturesOn) {
 						// pointer to texturemap in global memory instead of making a new texture every time
-						TextureMap *texture = &textureList.at(0);
+						TextureMap *texture = &textureList.at(intersection.intersectedTriangle.textureIndex);
 						std::array<TexturePoint,3> *texturePoints = &intersection.intersectedTriangle.texturePoints;
 
 						glm::vec2 e0((*texturePoints)[1].x - (*texturePoints)[0].x, (*texturePoints)[1].y - (*texturePoints)[0].y);
@@ -966,7 +970,7 @@ void raytraceScene(DrawingWindow &window, bool shadowsOn = false, bool texturesO
 						texturePixel += (intersection.solution.y * e0 + intersection.solution.z * e1);
 						texturePixel.x *= (*texture).width;
 						texturePixel.y *= (*texture).height;
-						uint32_t rgbval = getTexturePixel(texturePixel.x, texturePixel.y, intersection.intersectedTriangle.textureIndex);
+						uint32_t rgbval = (*texture).pixels[(round(texturePixel.y) * (*texture).width) + round(texturePixel.x)];;
 						pixelColour = Colour(rgbval);
 						// std::cout << " x: " << texturePixel.x <<  " y: " << texturePixel.y << std::endl;
 					}
@@ -977,44 +981,71 @@ void raytraceScene(DrawingWindow &window, bool shadowsOn = false, bool texturesO
 					// min value of lighting 
 					float ambientLight = 0.2;
 					float specularCoeff = 0;
-					float diffuse = 1;
-					float specular = 0;
+					// float diffuse = 1;
+					// float specular = 0;
+					std::vector<Colour> lightColours;
+					Colour extraColour(0,0,0);
 
 					// if using gouraud shading
 					if (intersection.intersectedTriangle.shaded) {
-						auto gouraudResult = gouraudShading(intersection, directionVector, specularCoeff);
-						brightnessCoeff = std::get<0>(gouraudResult);
-						specularCoeff = std::get<1>(gouraudResult);
+						auto gouraudResult = gouraudShading(intersection, directionVector, specularCoeff, extraColour);
+						brightnessCoeff = gouraudResult;
 					}
 					// else use standard lighting 
 					// we need to dim the brightness of colour of the pixels in shadow by using a brightness coefficient
 					else {
 						// line-of-sight-shadows
-						if (shadowsOn) {
-							brightnessCoeff *= shadowTrace(intersection);
-							ambientLight *= brightnessCoeff;
-						}
-						// proximity lighting
-						if (useProximity) {
-							diffuse *= proximityLighting(intersection);
-						// incidence lighting
-							if (useIncidence) {
-								diffuse *= incidenceLighting(intersection);
+						// float shadowVal = 1;
+						float brightestLight = 0;
+						float proxVal = 0;
+						float incVal = 0;
+						float specVal = 0;
+
+						for (int lt = 0; lt < lightList.size(); lt++) {
+							Light thisLight = lightList.at(lt);
+							float thisProx = 0;
+							float thisInc = 0;
+							float thisSpec = 0;
+							float shadowVal = 0;
+
+							if (shadowsOn) {
+								shadowVal = shadowTrace(intersection, thisLight);
+								brightestLight = std::max(thisLight.intensity, brightestLight);
+								brightnessCoeff *= shadowVal;
 							}
+							// proximity lighting
+							if (useProximity) {
+								thisProx = proximityLighting(intersection, thisLight);
+								proxVal = std::max(thisProx, proxVal);
+							}
+							// incidence lighting
+							if (useIncidence) {
+								thisInc = incidenceLighting(intersection, thisLight);
+								incVal = std::max(thisInc, incVal);
+							}
+
+							if (useSpecular) {
+								thisSpec = specularLighting(intersection, directionVector, thisLight);
+								specVal = std::max(thisSpec, specVal);
+							}
+
+							float thisMax = std::max({ambientLight, thisProx * thisInc, thisSpec});
+							float scale = thisLight.colourIntensity * shadowVal * thisMax * thisLight.intensity;
+							extraColour.red += thisLight.colour.red * scale;
+							extraColour.green += thisLight.colour.green * scale;
+							extraColour.blue += thisLight.colour.blue * scale;
+
 						}
-						if (useSpecular) {
-							specular = specularLighting(intersection, directionVector);
-							specularCoeff += specular * SPECINT;
-							specularCoeff = clamp(specularCoeff, 0, 255);
-						}
-						brightnessCoeff = std::max({ambientLight, brightnessCoeff * diffuse, specular * brightnessCoeff});
+						brightnessCoeff *= brightestLight;
+						specularCoeff = clamp(specVal * SPECINT, 0, 255);
+						brightnessCoeff = std::max({brightnessCoeff * ambientLight, brightnessCoeff * proxVal * incVal, brightnessCoeff * specVal});
 						clamp(brightnessCoeff,0,1);
 					}
 
-					pixelColour.blue = clamp(pixelColour.blue * brightnessCoeff + specularCoeff, 0, 255);
-					pixelColour.green = clamp(pixelColour.green * brightnessCoeff + specularCoeff, 0, 255);
-					pixelColour.red = clamp(pixelColour.red * brightnessCoeff + specularCoeff, 0, 255);
-
+					// white lights 
+					pixelColour.red = clamp(pixelColour.red * brightnessCoeff + specularCoeff + extraColour.red, 0, 255);
+					pixelColour.green = clamp(pixelColour.green * brightnessCoeff + specularCoeff + extraColour.green, 0, 255);
+					pixelColour.blue = clamp(pixelColour.blue * brightnessCoeff + specularCoeff + extraColour.blue, 0, 255);
 
 				}
 				window.setPixelColour(xs, ys, ColourToInt(pixelColour));
@@ -1046,12 +1077,15 @@ void clearScene(DrawingWindow &window) {
 }
 
 void draw(DrawingWindow &window) {
+
 	// if rendering scene as a whole (raytracing)
 	if (renderStyle == 3) {
 		raytraceScene(window);
 	}
 	// raytracing with all on
 	else if (renderStyle == 4) {
+		triangleList[26].reflectiveness = 1;
+		triangleList[31].reflectiveness = 1;
 		raytraceScene(window, true, true, true, true, true);
 	}
 	// raytracing with los shadows, no texture, proximity lighting
@@ -1144,7 +1178,7 @@ void readMaterialFile(std::unordered_map<std::string, Colour> &materials, std::s
 	}
 } 
 
-void readOBJFile(std::string filename, DrawingWindow &window, std::unordered_map<std::string, Colour> materials) {
+void readOBJFile(std::string filename, DrawingWindow &window, std::unordered_map<std::string, Colour> materials, glm::vec3 transpose = glm::vec3(0, 0, 0), float scale = 1, int currentTextureIndex = 0) {
 	std::ifstream file(filename, std::ifstream::in);	
 	std::string readLine;
 	std::vector<glm::vec3> vertexList;
@@ -1152,7 +1186,6 @@ void readOBJFile(std::string filename, DrawingWindow &window, std::unordered_map
 	std::vector<TexturePoint> texturePointList;
 	Colour currentMaterial(255,0,0);
 	bool currentMaterialIsTexture = false;
-	int currentTextureIndex = 0;
 
 	if (file.is_open()) {
 		while(std::getline(file, readLine)) {
@@ -1171,7 +1204,7 @@ void readOBJFile(std::string filename, DrawingWindow &window, std::unordered_map
 				y = std::stof(lineSegments[2]);
 				z = std::stof(lineSegments[3]);
 
-				vertexList.push_back(glm::vec3(x,y,z));
+				vertexList.push_back(glm::vec3(x,y,z)*scale + transpose);
 			}
 			else if (lineSegments[0] == "vt") {
 				float x, y;
@@ -1256,7 +1289,9 @@ void loadObjs(DrawingWindow &window) {
 
 	triangleList.clear();
 	readOBJFile(BOX, window, materials);
-	// readOBJFile(BALL, window, materials);
+	// top of box glm::vec3(-1,0.1,-1.6)
+	readOBJFile(BALL, window, materials, glm::vec3(-1.5,-3.3,0));
+	readOBJFile(LOGO, window, materials, glm::vec3(1,0,1), 0.1, 1);
 	triangleList = scaleModelTriangles(triangleList, 0.17);
 }
 
@@ -1323,59 +1358,6 @@ void rotateScene(int dir = 0, float angle = M_PI/16) {
 	}
 	lookAt(ORIGIN);
 }
-
-// void rotateCamera(int dir = 0, float angle = M_PI/16) {
-// 	glm::mat3 matrix;
-// 	switch (dir) {
-// 	case 1:
-// 		// rotate left (about y) key: J
-// 		matrix = glm::mat3(
-// 			cos(angle), 0, -sin(angle),
-// 			         0, 1, 0,
-// 			sin(angle), 0, cos(angle)
-// 		);
-// 		// campos = matrix * campos;
-// 		camrot = matrix * camrot;
-// 		break;
-		
-	
-// 	case 2:
-// 		// rotate right (about y) key: L
-// 		matrix = glm::mat3(
-// 			cos(-angle), 0, -sin(-angle),
-// 			          0, 1, 0,
-// 			sin(-angle), 0, cos(-angle)
-// 		);
-// 		// campos = matrix * campos;
-// 		camrot = matrix * camrot;
-// 		break;
-	
-// 	case 3:
-// 		// rotate up (about x) key I
-// 		matrix = glm::mat3(
-// 			1,           0, 0,
-// 			0,  cos(angle), sin(angle),
-// 			0, -sin(angle), cos(angle)
-// 		);
-// 		// campos = matrix * campos;
-// 		camrot = matrix * camrot;
-// 		break;
-	
-// 	case 4:
-// 		// rotate down (about x) key K
-// 		matrix = glm::mat3(
-// 			1,            0, 0,
-// 			0,  cos(-angle), sin(-angle),
-// 			0, -sin(-angle), cos(-angle)
-// 		);		
-// 		// campos = matrix * campos;
-// 		camrot = matrix * camrot;
-// 		break;
-	
-// 	default:
-// 		break;
-// 	}
-// }
 
 void orbitCamera() {
 	rotateScene(1, 0.01);
