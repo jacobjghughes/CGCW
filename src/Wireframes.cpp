@@ -44,8 +44,6 @@
 #define SPECPOW 1024
 #define PROXINT 6
 
-// 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
-
 // camerawork stuff ------------------------------------------------------------------------------
 	std::vector<glm::vec3> positions({
 		(glm::vec3(0, 0, 1)),
