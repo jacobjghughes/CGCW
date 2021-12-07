@@ -1,4 +1,4 @@
-PROJECT_NAME := Wireframes
+PROJECT_NAME := coursework
 
 BUILD_DIR := build
 
