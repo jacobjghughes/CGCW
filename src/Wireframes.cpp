@@ -108,7 +108,7 @@ std::vector<ModelTriangle> triangleList;
 int modelCount = 0;
 std::vector<TextureMap> textureList;
 glm::mat3 camrot(DEFROT);
-int renderStyle = 0;
+int renderStyle = 4;
 
 CanvasPoint vecToCP(glm::vec3 vec) {
 	CanvasPoint p(vec.x, vec.y, vec.z);
